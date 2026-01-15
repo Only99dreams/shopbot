@@ -1,10 +1,6 @@
 {
   "rewrites": [
     {
-      "source": "/shop/:shopId",
-      "destination": "/api/og-redirect?path=/shop/:shopId"
-    },
-    {
       "source": "/((?!api/).*)",
       "destination": "/"
     }
