@@ -1,0 +1,23 @@
+{
+  "rewrites": [
+    {
+      "source": "/shop/:shopId",
+      "destination": "/api/og-redirect?path=/shop/:shopId"
+    },
+    {
+      "source": "/((?!api/).*)",
+      "destination": "/"
+    }
+  ],
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        {
+          "key": "X-Frame-Options",
+          "value": "DENY"
+        }
+      ]
+    }
+  ]
+}

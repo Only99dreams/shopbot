@@ -1,0 +1,194 @@
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 160 10% 10%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 160 10% 10%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 160 10% 10%;
+
+    --primary: 142 70% 45%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 142 40% 96%;
+    --secondary-foreground: 142 70% 30%;
+
+    --muted: 142 20% 96%;
+    --muted-foreground: 160 10% 45%;
+
+    --accent: 142 60% 92%;
+    --accent-foreground: 142 70% 25%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 142 20% 90%;
+    --input: 142 20% 90%;
+    --ring: 142 70% 45%;
+
+    --radius: 0.75rem;
+
+    /* Custom tokens */
+    --whatsapp-light: 142 72% 55%;
+    --whatsapp-dark: 142 70% 38%;
+    --gradient-primary: linear-gradient(135deg, hsl(142, 72%, 55%) 0%, hsl(142, 70%, 38%) 100%);
+    --gradient-hero: linear-gradient(180deg, hsl(142, 40%, 98%) 0%, hsl(0, 0%, 100%) 100%);
+    --gradient-card: linear-gradient(145deg, hsl(0, 0%, 100%) 0%, hsl(142, 30%, 98%) 100%);
+    --shadow-soft: 0 4px 20px -4px hsl(142, 70%, 45%, 0.15);
+    --shadow-glow: 0 0 40px hsl(142, 70%, 45%, 0.2);
+    --shadow-card: 0 8px 32px -8px hsl(160, 10%, 10%, 0.08);
+
+    --sidebar-background: 0 0% 98%;
+    --sidebar-foreground: 240 5.3% 26.1%;
+    --sidebar-primary: 142 70% 45%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 142 40% 96%;
+    --sidebar-accent-foreground: 142 70% 30%;
+    --sidebar-border: 142 20% 90%;
+    --sidebar-ring: 142 70% 45%;
+  }
+
+  .dark {
+    --background: 160 20% 6%;
+    --foreground: 142 20% 98%;
+
+    --card: 160 20% 8%;
+    --card-foreground: 142 20% 98%;
+
+    --popover: 160 20% 8%;
+    --popover-foreground: 142 20% 98%;
+
+    --primary: 142 70% 50%;
+    --primary-foreground: 160 20% 6%;
+
+    --secondary: 160 20% 15%;
+    --secondary-foreground: 142 20% 98%;
+
+    --muted: 160 20% 15%;
+    --muted-foreground: 142 15% 65%;
+
+    --accent: 160 20% 18%;
+    --accent-foreground: 142 20% 98%;
+
+    --destructive: 0 62% 50%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 160 20% 18%;
+    --input: 160 20% 18%;
+    --ring: 142 70% 50%;
+
+    --sidebar-background: 160 20% 8%;
+    --sidebar-foreground: 142 20% 98%;
+    --sidebar-primary: 142 70% 50%;
+    --sidebar-primary-foreground: 160 20% 6%;
+    --sidebar-accent: 160 20% 15%;
+    --sidebar-accent-foreground: 142 20% 98%;
+    --sidebar-border: 160 20% 18%;
+    --sidebar-ring: 142 70% 50%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    font-family: 'Plus Jakarta Sans', sans-serif;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* Improve touch targets on mobile */
+  @media (max-width: 640px) {
+    button, a, input, select, textarea {
+      min-height: 44px;
+    }
+  }
+
+  /* Prevent horizontal scroll on mobile */
+  html, body {
+    overflow-x: hidden;
+  }
+}
+
+@layer utilities {
+  .gradient-primary {
+    background: var(--gradient-primary);
+  }
+
+  .gradient-hero {
+    background: var(--gradient-hero);
+  }
+
+  .gradient-card {
+    background: var(--gradient-card);
+  }
+
+  .shadow-soft {
+    box-shadow: var(--shadow-soft);
+  }
+
+  .shadow-glow {
+    box-shadow: var(--shadow-glow);
+  }
+
+  .shadow-card {
+    box-shadow: var(--shadow-card);
+  }
+
+  .text-gradient {
+    @apply bg-clip-text text-transparent;
+    background: var(--gradient-primary);
+  }
+
+  .animate-float {
+    animation: float 6s ease-in-out infinite;
+  }
+
+  .animate-pulse-soft {
+    animation: pulse-soft 3s ease-in-out infinite;
+  }
+
+  .animate-slide-up {
+    animation: slide-up 0.6s ease-out forwards;
+  }
+
+  .animate-fade-in {
+    animation: fade-in 0.8s ease-out forwards;
+  }
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-20px); }
+}
+
+@keyframes pulse-soft {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.8; }
+}
+
+@keyframes slide-up {
+  from {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
