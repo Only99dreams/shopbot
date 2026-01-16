@@ -99,8 +99,8 @@ export default function Referrals() {
     if (navigator.share) {
       try {
         await navigator.share({
-          title: "Join WAShop",
-          text: "Start selling on WhatsApp with WAShop! Use my referral link to get started:",
+          title: "Join ShopAfrica",
+          text: "Start selling on WhatsApp with ShopAfrica! Use my referral link to get started:",
           url: referralLink,
         });
       } catch (err) {
@@ -111,10 +111,17 @@ export default function Referrals() {
     }
   };
 
+  // Calculate conversion rate (completed referrals / total referrals)
+  const completedReferrals = referrals.filter(r => r.status === 'completed').length;
+  const totalReferrals = referralCode?.total_referrals || 0;
+  const conversionRate = totalReferrals > 0 
+    ? Math.round((completedReferrals / totalReferrals) * 100) 
+    : 0;
+
   const stats = [
     { 
       title: "Total Referrals", 
-      value: referralCode?.total_referrals || 0, 
+      value: totalReferrals, 
       icon: Users,
       color: "text-blue-500",
       bg: "bg-blue-500/10"
@@ -135,7 +142,7 @@ export default function Referrals() {
     },
     { 
       title: "Conversion Rate", 
-      value: referralCode?.total_referrals ? "32%" : "0%", 
+      value: `${conversionRate}%`, 
       icon: TrendingUp,
       color: "text-purple-500",
       bg: "bg-purple-500/10"

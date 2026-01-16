@@ -69,8 +69,8 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
       {/* Mobile Header */}
       <div className="lg:hidden fixed top-0 left-0 right-0 z-50 bg-card border-b border-border h-14 flex items-center justify-between px-4">
         <Link to="/" className="flex items-center gap-2">
-          <img src="/logo.png" alt="WAShop" className="h-8 w-8 object-contain" />
-          <span className="font-semibold truncate max-w-[150px]">{shop?.name || 'WAShop'}</span>
+          <img src="/logo.png" alt="ShopAfrica" className="h-8 w-8 object-contain" />
+          <span className="font-semibold truncate max-w-[150px]">{shop?.name || 'ShopAfrica'}</span>
         </Link>
         <div className="flex items-center gap-2">
           <ThemeToggle />
@@ -107,8 +107,8 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
           <div className="hidden lg:flex h-16 items-center justify-between px-4 border-b border-border">
             {!collapsed && (
               <Link to="/" className="flex items-center gap-2">
-                <img src="/logo.png" alt="WAShop" className="h-8 w-8 object-contain" />
-                <span className="font-semibold">{shop?.name || 'WAShop'}</span>
+                <img src="/logo.png" alt="ShopAfrica" className="h-8 w-8 object-contain" />
+                <span className="font-semibold">{shop?.name || 'ShopAfrica'}</span>
               </Link>
             )}
             <button

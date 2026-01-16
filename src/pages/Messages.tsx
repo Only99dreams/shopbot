@@ -261,7 +261,7 @@ export default function Messages() {
             ) : (
               <div className="flex-1 flex flex-col items-center justify-center text-center p-8">
                 <div className="p-4 rounded-full bg-primary/10 mb-6">
-                  <img src="/logo.png" alt="WAShop" className="h-16 w-16 object-contain" />
+                  <img src="/logo.png" alt="ShopAfrica" className="h-16 w-16 object-contain" />
                 </div>
                 <h2 className="text-2xl font-bold mb-2">WhatsApp Messages</h2>
                 <p className="text-muted-foreground max-w-md">

@@ -25,6 +25,7 @@ import { ProtectedRoute } from "./components/ProtectedRoute";
 import Shop from "./pages/Shop";
 import ProductDetail from "./pages/ProductDetail";
 import Checkout from "./pages/Checkout";
+import Marketplace from "./pages/Marketplace";
 // Admin pages
 import Sellers from "./pages/admin/Sellers";
 import Shops from "./pages/admin/Shops";
@@ -50,6 +51,7 @@ const App = () => (
           <AuthProvider>
             <Routes>
               <Route path="/" element={<Index />} />
+              <Route path="/marketplace" element={<Marketplace />} />
               <Route path="/auth" element={<Auth />} />
               <Route path="/reset-password" element={<ResetPassword />} />
               {/* Public storefront routes */}

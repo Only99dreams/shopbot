@@ -67,7 +67,7 @@ serve(async (req) => {
     // Send OTP via Twilio WhatsApp
     const twilioUrl = `https://api.twilio.com/2010-04-01/Accounts/${twilioAccountSid}/Messages.json`;
     
-    const message = `🔐 *WAShop Verification*\n\nYour verification code is: *${otpCode}*\n\nThis code expires in 5 minutes.\n\nIf you didn't request this code, please ignore this message.`;
+    const message = `🔐 *ShopAfrica Verification*\n\nYour verification code is: *${otpCode}*\n\nThis code expires in 5 minutes.\n\nIf you didn't request this code, please ignore this message.`;
 
     const formData = new URLSearchParams();
     formData.append('To', `whatsapp:${whatsappPhone}`);

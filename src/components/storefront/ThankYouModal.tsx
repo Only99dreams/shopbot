@@ -1,6 +1,6 @@
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { CheckCircle, Gift, Store, Share2, Copy } from 'lucide-react';
+import { CheckCircle, Gift, Store, Share2, Copy, Sparkles, ArrowRight } from 'lucide-react';
 import { useReferralEarnings } from '@/hooks/usePlatformSettings';
 import { toast } from 'sonner';
 
@@ -54,53 +54,51 @@ export function ThankYouModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
-        <div className="flex flex-col items-center text-center space-y-4 py-4">
-          {/* Success Icon */}
-          <div className="w-16 h-16 rounded-full bg-green-100 flex items-center justify-center">
-            <CheckCircle className="w-10 h-10 text-green-600" />
+      <DialogContent className="sm:max-w-md p-0 overflow-hidden">
+        {/* Success Header */}
+        <div className="bg-gradient-to-br from-green-500 to-emerald-600 p-8 text-center text-white">
+          <div className="w-20 h-20 mx-auto rounded-full bg-white/20 backdrop-blur flex items-center justify-center mb-4">
+            <CheckCircle className="w-12 h-12 text-white" />
           </div>
+          <h2 className="text-2xl font-bold mb-2">
+            Thank You! 🎉
+          </h2>
+          <p className="text-white/90">
+            Order #{orderNumber} has been placed
+          </p>
+        </div>
 
-          {/* Thank You Message */}
-          <div className="space-y-2">
-            <h2 className="text-2xl font-bold text-foreground">
-              Thank You for Your Order! 🎉
-            </h2>
-            <p className="text-muted-foreground">
-              Order #{orderNumber} has been placed successfully.
-            </p>
-            <p className="text-sm text-muted-foreground">
-              Once your payment is verified, you'll receive a confirmation.
-            </p>
-          </div>
-
-          {/* Divider */}
-          <div className="w-full border-t border-border my-4" />
+        <div className="p-6 space-y-5">
+          <p className="text-sm text-center text-muted-foreground">
+            Once your payment is verified, you'll receive a confirmation from the seller.
+          </p>
 
           {/* Start Your Own Shop Section */}
-          <div className="bg-gradient-to-br from-primary/10 to-primary/5 rounded-lg p-4 w-full space-y-3">
+          <div className="bg-gradient-to-br from-primary/10 via-primary/5 to-transparent rounded-2xl p-5 space-y-4 border border-primary/10">
             <div className="flex items-center justify-center gap-2">
-              <Gift className="w-5 h-5 text-primary" />
-              <h3 className="font-semibold text-foreground">
+              <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
+                <Sparkles className="w-4 h-4 text-primary" />
+              </div>
+              <h3 className="font-bold text-foreground">
                 Want to Earn Money Too?
               </h3>
             </div>
             
-            <p className="text-sm text-muted-foreground">
-              Start your own online shop with ShopNaija and earn from sales!
+            <p className="text-sm text-center text-muted-foreground">
+              Start your own online shop with ShopAfrica and earn from sales!
             </p>
 
             {referralEarnings && (
-              <div className="bg-background/80 rounded-md p-3 space-y-2">
+              <div className="bg-background rounded-xl p-4 space-y-2 border">
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-muted-foreground">Signup Bonus:</span>
-                  <span className="font-semibold text-green-600">
+                  <span className="font-bold text-green-600">
                     {formatCurrency(referralEarnings.signup_bonus)}
                   </span>
                 </div>
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-muted-foreground">Referral Earnings:</span>
-                  <span className="font-semibold text-green-600">
+                  <span className="font-bold text-green-600">
                     {referralEarnings.subscription_percentage}% on subscriptions
                   </span>
                 </div>
@@ -108,23 +106,24 @@ export function ThankYouModal({
             )}
 
             <Button 
-              className="w-full" 
+              className="w-full rounded-full h-11 font-semibold shadow-lg shadow-primary/25" 
               onClick={() => window.location.href = '/auth'}
             >
               <Store className="w-4 h-4 mr-2" />
               Start Your Own Shop
+              <ArrowRight className="w-4 h-4 ml-2" />
             </Button>
           </div>
 
           {/* Share Shop Section */}
-          <div className="w-full space-y-2">
-            <p className="text-sm text-muted-foreground">
+          <div className="space-y-3">
+            <p className="text-sm text-center text-muted-foreground">
               Loved shopping here? Share this shop!
             </p>
-            <div className="flex gap-2">
+            <div className="flex gap-3">
               <Button 
                 variant="outline" 
-                className="flex-1"
+                className="flex-1 rounded-full"
                 onClick={handleCopyLink}
               >
                 <Copy className="w-4 h-4 mr-2" />
@@ -132,7 +131,7 @@ export function ThankYouModal({
               </Button>
               <Button 
                 variant="outline" 
-                className="flex-1"
+                className="flex-1 rounded-full"
                 onClick={handleShare}
               >
                 <Share2 className="w-4 h-4 mr-2" />
@@ -144,7 +143,7 @@ export function ThankYouModal({
           {/* Close Button */}
           <Button 
             variant="ghost" 
-            className="w-full"
+            className="w-full rounded-full"
             onClick={() => onOpenChange(false)}
           >
             Continue Shopping

@@ -596,7 +596,9 @@ export type Database = {
         Row: {
           account_name: string | null
           account_number: string | null
+          address: string | null
           bank_name: string | null
+          city: string | null
           created_at: string
           description: string | null
           id: string
@@ -605,13 +607,16 @@ export type Database = {
           name: string
           owner_id: string
           settings: Json | null
+          state: string | null
           updated_at: string
           whatsapp_number: string | null
         }
         Insert: {
           account_name?: string | null
           account_number?: string | null
+          address?: string | null
           bank_name?: string | null
+          city?: string | null
           created_at?: string
           description?: string | null
           id?: string
@@ -620,13 +625,16 @@ export type Database = {
           name: string
           owner_id: string
           settings?: Json | null
+          state?: string | null
           updated_at?: string
           whatsapp_number?: string | null
         }
         Update: {
           account_name?: string | null
           account_number?: string | null
+          address?: string | null
           bank_name?: string | null
+          city?: string | null
           created_at?: string
           description?: string | null
           id?: string
@@ -635,6 +643,7 @@ export type Database = {
           name?: string
           owner_id?: string
           settings?: Json | null
+          state?: string | null
           updated_at?: string
           whatsapp_number?: string | null
         }

@@ -8,12 +8,22 @@ import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Store, User, Bell, Lock, Upload, Loader2, ExternalLink, Share2 } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Store, User, Bell, Lock, Upload, Loader2, ExternalLink, Share2, MapPin } from "lucide-react";
 import { useShop } from "@/hooks/useShop";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { ShopQRCodeCard } from "@/components/shop/ShopQRCode";
+
+// Nigerian states for location
+const NIGERIAN_STATES = [
+  'Abia', 'Adamawa', 'Akwa Ibom', 'Anambra', 'Bauchi', 'Bayelsa', 'Benue', 'Borno',
+  'Cross River', 'Delta', 'Ebonyi', 'Edo', 'Ekiti', 'Enugu', 'FCT', 'Gombe',
+  'Imo', 'Jigawa', 'Kaduna', 'Kano', 'Katsina', 'Kebbi', 'Kogi', 'Kwara',
+  'Lagos', 'Nasarawa', 'Niger', 'Ogun', 'Ondo', 'Osun', 'Oyo', 'Plateau',
+  'Rivers', 'Sokoto', 'Taraba', 'Yobe', 'Zamfara'
+];
 
 export default function Settings() {
   const { shop, updateShop, refetch } = useShop();
@@ -26,6 +36,9 @@ export default function Settings() {
     name: "",
     description: "",
     whatsapp_number: "",
+    state: "",
+    city: "",
+    address: "",
   });
 
   const [profileData, setProfileData] = useState({
@@ -47,6 +60,9 @@ export default function Settings() {
         name: shop.name || "",
         description: shop.description || "",
         whatsapp_number: shop.whatsapp_number || "",
+        state: shop.state || "",
+        city: shop.city || "",
+        address: shop.address || "",
       });
     }
   }, [shop]);
@@ -268,6 +284,58 @@ export default function Settings() {
                     />
                   </div>
 
+                  {/* Location Section */}
+                  <div className="pt-4 border-t">
+                    <div className="flex items-center gap-2 mb-4">
+                      <MapPin className="h-4 w-4 text-primary" />
+                      <Label className="text-base font-medium">Shop Location</Label>
+                    </div>
+                    <p className="text-sm text-muted-foreground mb-4">
+                      Setting your location helps customers find your shop in the marketplace
+                    </p>
+                    
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <div className="space-y-2">
+                        <Label htmlFor="state">State</Label>
+                        <Select 
+                          value={shopData.state} 
+                          onValueChange={(value) => setShopData({ ...shopData, state: value })}
+                        >
+                          <SelectTrigger id="state">
+                            <SelectValue placeholder="Select state" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {NIGERIAN_STATES.map((state) => (
+                              <SelectItem key={state} value={state}>
+                                {state}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="city">City</Label>
+                        <Input
+                          id="city"
+                          value={shopData.city}
+                          onChange={(e) => setShopData({ ...shopData, city: e.target.value })}
+                          placeholder="e.g., Ikeja, Victoria Island"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="space-y-2 mt-4">
+                      <Label htmlFor="address">Full Address (Optional)</Label>
+                      <Input
+                        id="address"
+                        value={shopData.address}
+                        onChange={(e) => setShopData({ ...shopData, address: e.target.value })}
+                        placeholder="Street address or landmark"
+                      />
+                    </div>
+                  </div>
+
                   <div className="space-y-2">
                     <Label>Shop URL</Label>
                     <div className="flex items-center gap-2">
@@ -354,7 +422,7 @@ export default function Settings() {
                   { id: "orderAlerts", label: "Order Alerts", desc: "Get notified when you receive new orders" },
                   { id: "lowStockAlerts", label: "Low Stock Alerts", desc: "Get notified when products are running low" },
                   { id: "customerMessages", label: "Customer Messages", desc: "Get notified when customers send messages" },
-                  { id: "marketingEmails", label: "Marketing Emails", desc: "Receive tips and updates about WAShop" },
+                  { id: "marketingEmails", label: "Marketing Emails", desc: "Receive tips and updates about ShopAfrica" },
                 ].map((item) => (
                   <div key={item.id} className="flex items-center justify-between">
                     <div>

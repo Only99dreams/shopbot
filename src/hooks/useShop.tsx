@@ -11,6 +11,9 @@ interface Shop {
   whatsapp_number: string | null;
   is_active: boolean;
   settings: Json;
+  state: string | null;
+  city: string | null;
+  address: string | null;
 }
 
 interface Subscription {
@@ -57,7 +60,10 @@ export function useShop() {
           logo_url: shopData.logo_url,
           whatsapp_number: shopData.whatsapp_number,
           is_active: shopData.is_active ?? true,
-          settings: shopData.settings ?? {}
+          settings: shopData.settings ?? {},
+          state: shopData.state,
+          city: shopData.city,
+          address: shopData.address
         });
 
         // Fetch subscription if shop exists

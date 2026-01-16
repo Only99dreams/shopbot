@@ -41,6 +41,7 @@ serve(async (req) => {
       .from('shops')
       .select('id, name, owner_id')
       .eq('whatsapp_number', shopPhone.replace('+', ''))
+      .eq('is_active', true)
       .single();
 
     if (!shop) {
@@ -53,9 +54,21 @@ serve(async (req) => {
         .single();
       
       if (!anyShop) {
-        return new Response('Shop not found', { status: 200 });
+        return new Response('Shop not found or inactive subscription', { status: 200 });
       }
       shop = anyShop;
+    }
+
+    // Verify the shop has an active subscription
+    const { data: subscription } = await supabase
+      .from('subscriptions')
+      .select('status')
+      .eq('shop_id', shop.id)
+      .single();
+
+    if (!subscription || subscription.status !== 'active') {
+      console.log(`Shop ${shop.id} has inactive subscription, ignoring message`);
+      return new Response('Shop subscription not active', { status: 200 });
     }
 
     const shopId = shop.id;

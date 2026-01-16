@@ -65,6 +65,17 @@ export function PaymentProofReviewDialog({
           .eq('id', proof.reference_id);
 
         if (subError) throw subError;
+
+        // Also activate the shop so it becomes visible to buyers
+        const { error: shopError } = await supabase
+          .from('shops')
+          .update({ is_active: true })
+          .eq('id', proof.shop_id);
+
+        if (shopError) {
+          console.error('Error activating shop:', shopError);
+        }
+
         toast.success("Subscription activated successfully");
       } else if (proof.payment_type === 'order') {
         // Update order payment status

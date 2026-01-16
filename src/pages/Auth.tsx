@@ -249,7 +249,7 @@ export default function Auth() {
       setStep('success');
       toast({
         title: "Account created!",
-        description: "Welcome to WAShop. Your 14-day trial has started.",
+        description: "Welcome to ShopAfrica. Your subscription is pending activation.",
       });
       setTimeout(() => navigate('/dashboard'), 2000);
     }
@@ -281,11 +281,43 @@ export default function Auth() {
     }
 
     // OTP verified, now create the account
-    const { error } = await signUp(registerData.email, registerData.password, {
+    const { error, data } = await signUp(registerData.email, registerData.password, {
       full_name: registerData.shopName,
       phone: formatPhoneNumber(registerData.phone),
       shop_name: registerData.shopName,
     });
+
+    // Process referral if there's a referral code
+    if (!error && data?.user && referralCode) {
+      try {
+        // Find the referrer by code
+        const { data: codeData } = await supabase
+          .from('referral_codes')
+          .select('user_id')
+          .eq('code', referralCode.toUpperCase())
+          .single();
+
+        if (codeData?.user_id) {
+          // Create referral record
+          await supabase.from('referrals').insert({
+            referrer_id: codeData.user_id,
+            referred_id: data.user.id,
+            referral_code: referralCode.toUpperCase(),
+            status: 'pending',
+            reward_amount: 200, // ₦200 reward when referred user pays
+          });
+
+          // Update referrer's total referrals count
+          await supabase.rpc('increment_referral_count', { 
+            referrer_user_id: codeData.user_id 
+          });
+        }
+      } catch (refError) {
+        console.error('Error processing referral:', refError);
+        // Don't fail registration if referral processing fails
+      }
+    }
+
     setOtpLoading(false);
 
     if (error) {
@@ -303,7 +335,7 @@ export default function Auth() {
       setStep('success');
       toast({
         title: "Account created!",
-        description: "Welcome to WAShop. Your 14-day trial has started.",
+        description: "Welcome to ShopAfrica. Your subscription is pending activation.",
       });
       setTimeout(() => navigate('/dashboard'), 2000);
     }
@@ -407,7 +439,7 @@ export default function Auth() {
           <div className="h-20 w-20 mx-auto rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
             <CheckCircle2 className="h-10 w-10 text-green-600" />
           </div>
-          <h1 className="text-3xl font-bold">Welcome to WAShop!</h1>
+          <h1 className="text-3xl font-bold">Welcome to ShopAfrica!</h1>
           <p className="text-muted-foreground">Your account has been created. Redirecting to dashboard...</p>
           <Loader2 className="h-6 w-6 animate-spin mx-auto text-primary" />
         </div>
@@ -423,7 +455,7 @@ export default function Auth() {
           {isLogin ? (
             <div className="text-center">
               <div className="h-32 w-32 mx-auto mb-8 rounded-full bg-primary-foreground/20 flex items-center justify-center p-4">
-                <img src="/logo.png" alt="WAShop" className="h-full w-full object-contain" />
+                <img src="/logo.png" alt="ShopAfrica" className="h-full w-full object-contain" />
               </div>
               <h2 className="text-3xl font-bold mb-4">Sell Smarter on WhatsApp</h2>
               <p className="text-primary-foreground/80 text-lg">
@@ -454,8 +486,8 @@ export default function Auth() {
         <div className="w-full max-w-md space-y-6 sm:space-y-8">
           <div className="text-center">
             <Link to="/" className="inline-flex items-center gap-2">
-              <img src="/logo.png" alt="WAShop" className="h-10 w-10 object-contain" />
-              <span className="text-2xl font-bold">WAShop</span>
+              <img src="/logo.png" alt="ShopAfrica" className="h-10 w-10 object-contain" />
+              <span className="text-2xl font-bold">ShopAfrica</span>
             </Link>
             <h1 className="mt-8 text-3xl font-bold">
               {isLogin ? "Welcome back" : "Create your shop"}

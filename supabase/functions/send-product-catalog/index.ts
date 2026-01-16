@@ -136,7 +136,7 @@ serve(async (req) => {
     }
 
     // Send footer message
-    const footerMessage = `📱 *Need help?*\n\nReply to this chat or call us at ${shop.whatsapp_number || 'our store number'}\n\n_Powered by WAShop_`;
+    const footerMessage = `📱 *Need help?*\n\nReply to this chat or call us at ${shop.whatsapp_number || 'our store number'}\n\n_Powered by ShopAfrica_`;
     
     const footerFormData = new URLSearchParams();
     footerFormData.append('To', `whatsapp:${whatsappPhone}`);

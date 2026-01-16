@@ -9,10 +9,12 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import { ChevronLeft, MessageCircle, Trash2, CreditCard, Loader2, Building2 } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { ChevronLeft, MessageCircle, Trash2, CreditCard, Loader2, Building2, ShoppingBag, Shield, Lock, Minus, Plus } from 'lucide-react';
 import { toast } from 'sonner';
 import { z } from 'zod';
 import { BankTransferModal } from '@/components/storefront/BankTransferModal';
+import { cn } from '@/lib/utils';
 
 const checkoutSchema = z.object({
   name: z.string().min(2, 'Name must be at least 2 characters'),
@@ -55,6 +57,25 @@ function CheckoutContent() {
     },
     enabled: !!shopId
   });
+
+  // Fetch subscription to check if shop owner has active subscription
+  const { data: subscription } = useQuery({
+    queryKey: ['shop-subscription', shopId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('subscriptions')
+        .select('*')
+        .eq('shop_id', shopId!)
+        .maybeSingle();
+
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!shopId
+  });
+
+  // Check if subscription is active
+  const isSubscriptionActive = subscription?.status === 'active';
 
   const createOrder = useMutation({
     mutationFn: async () => {
@@ -211,14 +232,39 @@ function CheckoutContent() {
     navigate(`/shop/${shopId}`);
   };
 
-  if (items.length === 0) {
+  // Check if subscription is active - prevent checkout for inactive shops
+  if (!isSubscriptionActive) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
-        <div className="text-center">
+        <div className="text-center max-w-md px-4">
+          <div className="h-20 w-20 mx-auto mb-6 rounded-full bg-amber-500/10 flex items-center justify-center">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-10 w-10 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+          </div>
+          <h1 className="text-2xl font-bold mb-2">Shop Currently Unavailable</h1>
+          <p className="text-muted-foreground mb-6">
+            This shop is temporarily closed and cannot accept orders. Please check back later.
+          </p>
+          <Link to="/">
+            <Button>Go Home</Button>
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  if (items.length === 0) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-b from-muted/30 to-background">
+        <div className="text-center max-w-md px-4">
+          <div className="h-24 w-24 mx-auto mb-6 rounded-full bg-primary/10 flex items-center justify-center">
+            <ShoppingBag className="h-12 w-12 text-primary" />
+          </div>
           <h1 className="text-2xl font-bold mb-2">Your cart is empty</h1>
-          <p className="text-muted-foreground mb-4">Add some products to proceed with checkout.</p>
+          <p className="text-muted-foreground mb-6">Add some products to proceed with checkout.</p>
           <Link to={`/shop/${shopId}`}>
-            <Button>Continue Shopping</Button>
+            <Button size="lg" className="rounded-full px-8">Continue Shopping</Button>
           </Link>
         </div>
       </div>
@@ -226,121 +272,245 @@ function CheckoutContent() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-gradient-to-b from-muted/30 to-background">
       {/* Header */}
-      <header className="sticky top-0 z-40 bg-background border-b">
-        <div className="container mx-auto px-4 py-3">
-          <Button variant="ghost" size="sm" onClick={() => navigate(`/shop/${shopId}`)}>
-            <ChevronLeft className="h-4 w-4 mr-1" />
-            Back to Shop
+      <header className="sticky top-0 z-40 bg-background/80 backdrop-blur-lg border-b">
+        <div className="container mx-auto px-4 py-3 flex items-center justify-between">
+          <Button variant="ghost" size="sm" onClick={() => navigate(`/shop/${shopId}`)} className="gap-1">
+            <ChevronLeft className="h-4 w-4" />
+            Back
           </Button>
+          <h1 className="font-semibold">Checkout</h1>
+          <div className="w-16" />
         </div>
       </header>
 
-      <main className="container mx-auto px-4 py-4 sm:py-8">
-        <h1 className="text-2xl sm:text-3xl font-bold mb-4 sm:mb-8">Checkout</h1>
+      <main className="container mx-auto px-4 py-6 sm:py-8">
+        <div className="grid lg:grid-cols-5 gap-6 lg:gap-8">
+          {/* Cart Items - Left Side */}
+          <div className="lg:col-span-2 space-y-4">
+            <div className="flex items-center justify-between">
+              <h2 className="text-xl font-bold">Order Summary</h2>
+              <Badge variant="secondary" className="rounded-full">
+                {items.reduce((sum, item) => sum + item.quantity, 0)} items
+              </Badge>
+            </div>
+            
+            <div className="space-y-3">
+              {items.map((item) => (
+                <div key={item.id} className="flex gap-3 p-3 bg-card rounded-xl border">
+                  <div className="w-20 h-20 rounded-lg overflow-hidden bg-muted flex-shrink-0">
+                    {item.image ? (
+                      <img src={item.image} alt={item.name} className="w-full h-full object-cover" />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center text-muted-foreground">
+                        <ShoppingBag className="w-6 h-6" />
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <h3 className="font-medium text-sm line-clamp-2">{item.name}</h3>
+                    <p className="text-primary font-semibold mt-1">₦{item.price.toLocaleString()}</p>
+                    <div className="flex items-center justify-between mt-2">
+                      <div className="flex items-center bg-muted rounded-full">
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-7 w-7 rounded-full"
+                          onClick={() => {
+                            if (item.quantity === 1) {
+                              removeItem(item.id);
+                            } else {
+                              // Manually update quantity via cart
+                            }
+                          }}
+                        >
+                          <Minus className="h-3 w-3" />
+                        </Button>
+                        <span className="w-6 text-center text-sm font-medium">{item.quantity}</span>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-7 w-7 rounded-full"
+                          onClick={() => {
+                            // Manually update quantity via cart
+                          }}
+                        >
+                          <Plus className="h-3 w-3" />
+                        </Button>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-red-500 hover:text-red-600 hover:bg-red-50"
+                        onClick={() => removeItem(item.id)}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
 
-        <div className="grid lg:grid-cols-2 gap-4 sm:gap-8">
-          {/* Order Summary - Show first on mobile */}
-          <Card className="lg:order-2">
-            <CardHeader className="pb-3 sm:pb-6">
-              <CardTitle className="text-lg sm:text-xl">Order Summary</CardTitle>
+            {/* Order Total Card */}
+            <Card className="bg-primary/5 border-primary/20">
+              <CardContent className="p-4">
+                <div className="space-y-2">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Subtotal</span>
+                    <span>₦{getTotal().toLocaleString()}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Delivery</span>
+                    <span className="text-green-600">To be confirmed</span>
+                  </div>
+                  <div className="h-px bg-border my-2" />
+                  <div className="flex justify-between text-lg font-bold">
+                    <span>Total</span>
+                    <span className="text-primary">₦{getTotal().toLocaleString()}</span>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Checkout Form - Right Side */}
+          <Card className="lg:col-span-3">
+            <CardHeader className="pb-4">
+              <CardTitle className="flex items-center gap-2">
+                <Lock className="h-5 w-5 text-primary" />
+                Secure Checkout
+              </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-3 sm:space-y-4">
-              <form onSubmit={handleSubmit} className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="name">Full Name *</Label>
-                  <Input
-                    id="name"
-                    value={formData.name}
-                    onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
-                    placeholder="Enter your full name"
-                  />
-                  {errors.name && <p className="text-sm text-destructive">{errors.name}</p>}
+            <CardContent>
+              <form onSubmit={handleSubmit} className="space-y-5">
+                {/* Personal Info */}
+                <div className="space-y-4">
+                  <h3 className="font-medium text-sm text-muted-foreground uppercase tracking-wide">Contact Information</h3>
+                  <div className="grid sm:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="name">Full Name *</Label>
+                      <Input
+                        id="name"
+                        value={formData.name}
+                        onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
+                        placeholder="John Doe"
+                        className="rounded-xl h-11"
+                      />
+                      {errors.name && <p className="text-sm text-destructive">{errors.name}</p>}
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="phone">Phone Number *</Label>
+                      <Input
+                        id="phone"
+                        value={formData.phone}
+                        onChange={(e) => setFormData(prev => ({ ...prev, phone: e.target.value }))}
+                        placeholder="08012345678"
+                        className="rounded-xl h-11"
+                      />
+                      {errors.phone && <p className="text-sm text-destructive">{errors.phone}</p>}
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="email">Email (for payment receipt)</Label>
+                    <Input
+                      id="email"
+                      type="email"
+                      value={formData.email}
+                      onChange={(e) => setFormData(prev => ({ ...prev, email: e.target.value }))}
+                      placeholder="your@email.com"
+                      className="rounded-xl h-11"
+                    />
+                    {errors.email && <p className="text-sm text-destructive">{errors.email}</p>}
+                  </div>
                 </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="phone">Phone Number *</Label>
-                  <Input
-                    id="phone"
-                    value={formData.phone}
-                    onChange={(e) => setFormData(prev => ({ ...prev, phone: e.target.value }))}
-                    placeholder="e.g., 08012345678"
-                  />
-                  {errors.phone && <p className="text-sm text-destructive">{errors.phone}</p>}
+                {/* Delivery Info */}
+                <div className="space-y-4 pt-4 border-t">
+                  <h3 className="font-medium text-sm text-muted-foreground uppercase tracking-wide">Delivery Address</h3>
+                  <div className="space-y-2">
+                    <Label htmlFor="address">Full Address *</Label>
+                    <Textarea
+                      id="address"
+                      value={formData.address}
+                      onChange={(e) => setFormData(prev => ({ ...prev, address: e.target.value }))}
+                      placeholder="Enter your complete delivery address"
+                      rows={3}
+                      className="rounded-xl resize-none"
+                    />
+                    {errors.address && <p className="text-sm text-destructive">{errors.address}</p>}
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="notes">Order Notes (Optional)</Label>
+                    <Textarea
+                      id="notes"
+                      value={formData.notes}
+                      onChange={(e) => setFormData(prev => ({ ...prev, notes: e.target.value }))}
+                      placeholder="Any special instructions"
+                      rows={2}
+                      className="rounded-xl resize-none"
+                    />
+                  </div>
                 </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="email">Email (for payment receipt)</Label>
-                  <Input
-                    id="email"
-                    type="email"
-                    value={formData.email}
-                    onChange={(e) => setFormData(prev => ({ ...prev, email: e.target.value }))}
-                    placeholder="your@email.com"
-                  />
-                  {errors.email && <p className="text-sm text-destructive">{errors.email}</p>}
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="address">Delivery Address *</Label>
-                  <Textarea
-                    id="address"
-                    value={formData.address}
-                    onChange={(e) => setFormData(prev => ({ ...prev, address: e.target.value }))}
-                    placeholder="Enter your full delivery address"
-                    rows={3}
-                  />
-                  {errors.address && <p className="text-sm text-destructive">{errors.address}</p>}
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="notes">Order Notes (Optional)</Label>
-                  <Textarea
-                    id="notes"
-                    value={formData.notes}
-                    onChange={(e) => setFormData(prev => ({ ...prev, notes: e.target.value }))}
-                    placeholder="Any special instructions for your order"
-                    rows={2}
-                  />
-                </div>
-
-                {/* Payment Method Selection */}
-                <div className="space-y-3 pt-4 border-t">
-                  <Label>Payment Method *</Label>
+                {/* Payment Method */}
+                <div className="space-y-4 pt-4 border-t">
+                  <h3 className="font-medium text-sm text-muted-foreground uppercase tracking-wide">Payment Method</h3>
                   <RadioGroup value={paymentMethod} onValueChange={(v) => setPaymentMethod(v as 'whatsapp' | 'paystack' | 'bank_transfer')}>
-                    <div className="flex items-center space-x-2 p-3 border rounded-lg cursor-pointer hover:bg-muted/50">
+                    <div className={cn(
+                      "flex items-center space-x-3 p-4 border-2 rounded-xl cursor-pointer transition-all",
+                      paymentMethod === 'bank_transfer' 
+                        ? "border-primary bg-primary/5" 
+                        : "border-transparent bg-muted/50 hover:bg-muted"
+                    )}>
                       <RadioGroupItem value="bank_transfer" id="bank_transfer" />
                       <Label htmlFor="bank_transfer" className="flex-1 cursor-pointer">
-                        <div className="flex items-center gap-2">
-                          <Building2 className="h-5 w-5 text-primary" />
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center">
+                            <Building2 className="h-5 w-5 text-blue-600" />
+                          </div>
                           <div>
-                            <p className="font-medium">Bank Transfer</p>
+                            <p className="font-semibold">Bank Transfer</p>
                             <p className="text-sm text-muted-foreground">Transfer & upload receipt</p>
                           </div>
                         </div>
                       </Label>
                     </div>
-                    <div className="flex items-center space-x-2 p-3 border rounded-lg cursor-pointer hover:bg-muted/50">
+                    <div className={cn(
+                      "flex items-center space-x-3 p-4 border-2 rounded-xl cursor-pointer transition-all",
+                      paymentMethod === 'paystack' 
+                        ? "border-primary bg-primary/5" 
+                        : "border-transparent bg-muted/50 hover:bg-muted"
+                    )}>
                       <RadioGroupItem value="paystack" id="paystack" />
                       <Label htmlFor="paystack" className="flex-1 cursor-pointer">
-                        <div className="flex items-center gap-2">
-                          <CreditCard className="h-5 w-5 text-primary" />
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center">
+                            <CreditCard className="h-5 w-5 text-green-600" />
+                          </div>
                           <div>
-                            <p className="font-medium">Pay with Card</p>
+                            <p className="font-semibold">Pay with Card</p>
                             <p className="text-sm text-muted-foreground">Secure payment via Paystack</p>
                           </div>
                         </div>
                       </Label>
                     </div>
-                    <div className="flex items-center space-x-2 p-3 border rounded-lg cursor-pointer hover:bg-muted/50">
+                    <div className={cn(
+                      "flex items-center space-x-3 p-4 border-2 rounded-xl cursor-pointer transition-all",
+                      paymentMethod === 'whatsapp' 
+                        ? "border-primary bg-primary/5" 
+                        : "border-transparent bg-muted/50 hover:bg-muted"
+                    )}>
                       <RadioGroupItem value="whatsapp" id="whatsapp" />
                       <Label htmlFor="whatsapp" className="flex-1 cursor-pointer">
-                        <div className="flex items-center gap-2">
-                          <MessageCircle className="h-5 w-5 text-green-600" />
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center">
+                            <MessageCircle className="h-5 w-5 text-emerald-600" />
+                          </div>
                           <div>
-                            <p className="font-medium">Pay on Delivery</p>
-                            <p className="text-sm text-muted-foreground">Order via WhatsApp, pay when delivered</p>
+                            <p className="font-semibold">Pay on Delivery</p>
+                            <p className="text-sm text-muted-foreground">Order via WhatsApp</p>
                           </div>
                         </div>
                       </Label>
@@ -348,10 +518,20 @@ function CheckoutContent() {
                   </RadioGroup>
                 </div>
 
+                {/* Security Badge */}
+                <div className="flex items-center gap-2 text-sm text-muted-foreground bg-muted/50 rounded-xl p-3">
+                  <Shield className="h-4 w-4 text-green-600" />
+                  <span>Your payment information is secure and encrypted</span>
+                </div>
+
+                {/* Submit Button */}
                 <Button
                   type="submit"
                   size="lg"
-                  className={`w-full ${paymentMethod === 'whatsapp' ? 'bg-green-600 hover:bg-green-700' : ''}`}
+                  className={cn(
+                    "w-full rounded-full h-14 text-base font-semibold shadow-lg",
+                    paymentMethod === 'whatsapp' && "bg-green-600 hover:bg-green-700 shadow-green-500/25"
+                  )}
                   disabled={isProcessing}
                 >
                   {isProcessing ? (
@@ -383,10 +563,10 @@ function CheckoutContent() {
       </main>
 
       {/* Footer */}
-      <footer className="bg-muted py-6 sm:py-8 mt-8 sm:mt-12">
+      <footer className="bg-muted/50 border-t py-8 mt-12">
         <div className="container mx-auto px-4 text-center">
-          <p className="text-muted-foreground text-sm sm:text-base">
-            Powered by <span className="font-semibold text-primary">ShopNaija</span>
+          <p className="text-muted-foreground text-sm">
+            Powered by <span className="font-semibold text-primary">ShopAfrica</span>
           </p>
         </div>
       </footer>

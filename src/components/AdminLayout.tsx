@@ -69,7 +69,7 @@ export function AdminLayout({ children }: AdminLayoutProps) {
       {/* Mobile Header */}
       <div className="lg:hidden fixed top-0 left-0 right-0 z-50 bg-card border-b border-border h-14 flex items-center justify-between px-4">
         <div className="flex items-center gap-2">
-          <img src="/logo.png" alt="WAShop" className="h-8 w-8 object-contain" />
+          <img src="/logo.png" alt="ShopAfrica" className="h-8 w-8 object-contain" />
           <span className="text-lg font-bold">Admin Panel</span>
         </div>
         <div className="flex items-center gap-2">
@@ -107,7 +107,7 @@ export function AdminLayout({ children }: AdminLayoutProps) {
           <div className="hidden lg:flex h-16 items-center justify-between px-4 border-b border-border">
             {!collapsed && (
               <div className="flex items-center gap-2">
-                <img src="/logo.png" alt="WAShop" className="h-8 w-8 object-contain" />
+                <img src="/logo.png" alt="ShopAfrica" className="h-8 w-8 object-contain" />
                 <span className="text-lg font-bold">Admin Panel</span>
               </div>
             )}

@@ -12,7 +12,7 @@ const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 export function ThemeProvider({ 
   children, 
   defaultTheme = 'dark',
-  storageKey = 'washop-theme'
+  storageKey = 'shopafrica-theme'
 }: { 
   children: ReactNode;
   defaultTheme?: Theme;

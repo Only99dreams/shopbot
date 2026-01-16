@@ -66,7 +66,7 @@ export function ShopQRCode({
       try {
         await navigator.share({
           title: `Shop at ${shopName}`,
-          text: `Check out amazing products at ${shopName} on ShopNaija!`,
+          text: `Check out amazing products at ${shopName} on ShopAfrica!`,
           url: shopUrl,
         });
       } catch (err) {

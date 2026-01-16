@@ -141,7 +141,7 @@ export default function ResetPassword() {
       <div className="hidden lg:flex flex-1 bg-primary items-center justify-center p-12">
         <div className="max-w-lg text-primary-foreground text-center">
           <div className="h-32 w-32 mx-auto mb-8 rounded-full bg-primary-foreground/20 flex items-center justify-center p-4">
-            <img src="/logo.png" alt="WAShop" className="h-full w-full object-contain" />
+            <img src="/logo.png" alt="ShopAfrica" className="h-full w-full object-contain" />
           </div>
           <h2 className="text-3xl font-bold mb-4">
             {step === 'update' ? 'Set New Password' : 'Reset Your Password'}
@@ -160,8 +160,8 @@ export default function ResetPassword() {
           {/* Logo for mobile */}
           <div className="lg:hidden text-center mb-8">
             <Link to="/" className="inline-flex items-center gap-2">
-              <img src="/logo.png" alt="WAShop" className="h-10 w-10 object-contain" />
-              <span className="text-2xl font-bold text-primary">WAShop</span>
+              <img src="/logo.png" alt="ShopAfrica" className="h-10 w-10 object-contain" />
+              <span className="text-2xl font-bold text-primary">ShopAfrica</span>
             </Link>
           </div>
 

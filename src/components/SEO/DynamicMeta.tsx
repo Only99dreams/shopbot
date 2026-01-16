@@ -31,7 +31,7 @@ function generateOgImageUrl(title: string, description?: string, logoUrl?: strin
     `logoTailwind=w-20%20h-20&` +
     `bgUrl=${encodeURIComponent('https://images.unsplash.com/photo-1557683316-973673baf926?w=1200')}&` +
     `bgTailwind=bg-gradient-to-br%20from-green-600%20to-green-800&` +
-    `footer=WAShop&` +
+    `footer=ShopAfrica&` +
     `footerTailwind=text-white%20text-lg`;
   
   return ogImageUrl;

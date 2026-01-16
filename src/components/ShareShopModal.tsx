@@ -41,7 +41,7 @@ export function ShareShopModal({ open, onOpenChange, shopLink, shopName }: Share
   const [copied, setCopied] = useState(false);
   const { toast } = useToast();
 
-  const shareMessage = `Check out ${shopName} on WAShop! 🛒`;
+  const shareMessage = `Check out ${shopName} on ShopAfrica! 🛒`;
   const encodedMessage = encodeURIComponent(shareMessage);
   const encodedLink = encodeURIComponent(shopLink);
 
