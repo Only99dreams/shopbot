@@ -1,4 +1,5 @@
 import { Toaster } from "@/components/ui/toaster";
+import React, { useEffect, useState, type FC } from "react";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -6,6 +7,8 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import { AuthProvider } from "@/hooks/useAuth";
 import Index from "./pages/Index";
+import PWAInstallManager from "./components/PWAInstallManager";
+import Preloader from "./components/Preloader";
 import Auth from "./pages/Auth";
 import ResetPassword from "./pages/ResetPassword";
 import Dashboard from "./pages/Dashboard";
@@ -41,15 +44,42 @@ import AdminSellersManagement from "./pages/admin/AdminSellersManagement";
 
 const queryClient = new QueryClient();
 
-const App = () => (
-  <QueryClientProvider client={queryClient}>
-    <ThemeProvider defaultTheme="dark" storageKey="shopnaija-theme">
-      <TooltipProvider>
-        <Toaster />
-        <Sonner />
-        <BrowserRouter>
-          <AuthProvider>
-            <Routes>
+const App = () => {
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const t = setTimeout(() => setLoading(false), 700);
+    return () => clearTimeout(t);
+  }, []);
+
+  const StandaloneHandler: FC = () => {
+    // runs inside BrowserRouter so we can use navigation
+    const { pathname } = (window.location as Location);
+    const isStandalone = window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone;
+    useEffect(() => {
+      try {
+        if (isStandalone && pathname !== '/marketplace') {
+          window.location.replace('/marketplace');
+        }
+      } catch (e) {
+        /* ignore */
+      }
+    }, [isStandalone, pathname]);
+    return null;
+  };
+
+  return (
+    <QueryClientProvider client={queryClient}>
+      <ThemeProvider defaultTheme="dark" storageKey="shopnaija-theme">
+        <TooltipProvider>
+          <Toaster />
+          <Sonner />
+          <BrowserRouter>
+            <AuthProvider>
+              <StandaloneHandler />
+              <Preloader visible={loading} />
+              <PWAInstallManager />
+              <Routes>
               <Route path="/" element={<Index />} />
               <Route path="/marketplace" element={<Marketplace />} />
               <Route path="/auth" element={<Auth />} />
@@ -89,6 +119,7 @@ const App = () => (
       </TooltipProvider>
     </ThemeProvider>
   </QueryClientProvider>
-);
+  );
+};
 
 export default App;
