@@ -266,9 +266,9 @@ export default function Subscription() {
           </CardHeader>
           <CardContent className="space-y-4">
             {[
-              { q: "How do I pay for a subscription?", a: "Click on the plan you want, make a bank transfer to our account, and upload your receipt. We'll activate your subscription within 24 hours." },
+              { q: "How do I pay for a subscription?", a: "Click on the plan you want and pay securely through Flutterwave. Your subscription will be activated immediately after payment." },
               { q: "Can I cancel anytime?", a: "Yes, you can cancel your subscription at any time. Your access will continue until the end of your billing period." },
-              { q: "What payment methods do you accept?", a: "We accept bank transfers. Simply transfer to our account and upload your receipt for verification." },
+              { q: "What payment methods do you accept?", a: "We accept all payment methods supported by Flutterwave including cards, bank transfers, mobile money, and digital wallets." },
               { q: "Can I switch plans?", a: "Yes, you can upgrade or downgrade your plan at any time. Changes take effect immediately." },
             ].map((faq) => (
               <div key={faq.q} className="p-4 rounded-lg bg-muted/50">

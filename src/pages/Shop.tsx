@@ -1,4 +1,4 @@
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { ShopHeader } from '@/components/storefront/ShopHeader';
@@ -7,18 +7,70 @@ import { CartDrawer } from '@/components/storefront/CartDrawer';
 import { CartProvider } from '@/hooks/useCart';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Search, MessageCircle, SlidersHorizontal, Grid3X3, LayoutGrid, Package, Sparkles } from 'lucide-react';
-import { useState } from 'react';
+import { Search, MessageCircle, SlidersHorizontal, Grid3X3, LayoutGrid, Package, Sparkles, ShoppingCart, CheckCircle, Clock, Loader2, Star } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Skeleton } from '@/components/ui/skeleton';
 import { DynamicMeta } from '@/components/SEO/DynamicMeta';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
+import { RedemptionCodeModal } from '@/components/RedemptionCodeModal';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { QrCode } from 'lucide-react';
+import { useAuth } from '@/hooks/useAuth';
+import { useMutation } from '@tanstack/react-query';
+import { toast } from 'sonner';
+import { Card, CardContent } from '@/components/ui/card';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 function ShopContent() {
   const { shopId } = useParams<{ shopId: string }>();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [gridCols, setGridCols] = useState<2 | 3>(2);
+  const [showPaymentSuccess, setShowPaymentSuccess] = useState(false);
+  const [redemptionCode, setRedemptionCode] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<'products' | 'orders'>('products');
+  const { user } = useAuth();
+  const [ratingOpenFor, setRatingOpenFor] = useState<string | null>(null);
+  const [ratingValue, setRatingValue] = useState<number>(5);
+  const [ratingReview, setRatingReview] = useState<string>('');
+
+  // Check for payment success
+  useEffect(() => {
+    const paymentSuccess = searchParams.get('payment') === 'success';
+    const reference = searchParams.get('reference');
+
+    if (paymentSuccess && reference) {
+      // Fetch the redemption code for this payment
+      const fetchRedemptionCode = async () => {
+        try {
+          const { data: payment } = await supabase
+            .from('payments')
+            .select(`
+              order_id,
+              orders (
+                redemption_codes (code)
+              )
+            `)
+            .eq('paystack_reference', reference)
+            .single();
+
+          if (payment?.orders?.redemption_codes?.[0]?.code) {
+            setRedemptionCode(payment.orders.redemption_codes[0].code);
+            setShowPaymentSuccess(true);
+            // Clean up URL
+            setSearchParams(new URLSearchParams());
+          }
+        } catch (error) {
+          console.error('Error fetching redemption code:', error);
+        }
+      };
+
+      fetchRedemptionCode();
+    }
+  }, [searchParams, setSearchParams]);
 
   const { data: shop, isLoading: shopLoading } = useQuery({
     queryKey: ['shop', shopId],
@@ -80,6 +132,60 @@ function ShopContent() {
       return data;
     },
     enabled: !!shopId
+  });
+
+  // Fetch user orders for this shop
+  const { data: userOrders, isLoading: ordersLoading, refetch: refetchOrders } = useQuery({
+    queryKey: ['shop-user-orders', shopId, user?.id],
+    queryFn: async () => {
+      if (!user?.id || !shopId) return [];
+
+      const { data, error } = await supabase
+        .from('orders')
+        .select(`
+          id,
+          order_number,
+          total,
+          status,
+          payment_status,
+          redemption_confirmed,
+          created_at,
+          order_items (
+            product_name,
+            quantity,
+            unit_price,
+            total_price
+          )
+        `)
+        .eq('customer_id', user.id)
+        .eq('shop_id', shopId)
+        .eq('payment_status', 'paid')
+        .eq('redemption_confirmed', false)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !!user?.id && !!shopId
+  });
+
+  // Confirm receipt mutation
+  const confirmReceiptMutation = useMutation({
+    mutationFn: async (orderId: string) => {
+      const { data, error } = await supabase.functions.invoke('redeem-code', {
+        body: { code: 'DIRECT_CONFIRM', action: 'confirm_receipt', orderId },
+      });
+
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      toast.success('Receipt confirmed! Seller has been credited.');
+      refetchOrders();
+    },
+    onError: (error: any) => {
+      toast.error(error.message || 'Failed to confirm receipt');
+    },
   });
 
   const filteredProducts = products?.filter(product => {
@@ -273,20 +379,175 @@ function ShopContent() {
 
       {/* Products Section */}
       <main className="container mx-auto px-4 py-8">
-        {/* Section Header */}
-        <div className="flex items-center justify-between mb-6">
-          <div>
-            <h2 className="text-xl sm:text-2xl font-bold flex items-center gap-2">
-              <Package className="w-6 h-6 text-primary" />
-              {selectedCategory 
-                ? categories?.find(c => c.id === selectedCategory)?.name 
-                : 'All Products'}
-            </h2>
-            <p className="text-muted-foreground text-sm mt-1">
-              {filteredProducts?.length || 0} products available
-            </p>
-          </div>
-        </div>
+        {user && userOrders && userOrders.length > 0 && (
+          <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'products' | 'orders')} className="mb-6">
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="products">
+                <Package className="w-4 h-4 mr-2" />
+                Products
+              </TabsTrigger>
+              <TabsTrigger value="orders">
+                <ShoppingCart className="w-4 h-4 mr-2" />
+                My Orders ({userOrders.length})
+              </TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="products" className="mt-6">
+              {/* Products content will go here */}
+            </TabsContent>
+
+            <TabsContent value="orders" className="mt-6">
+              {ordersLoading ? (
+                <div className="space-y-4">
+                  {[...Array(2)].map((_, i) => (
+                    <Card key={i} className="animate-pulse">
+                      <CardContent className="p-6">
+                        <div className="flex items-center justify-between mb-4">
+                          <div className="h-5 bg-muted rounded w-32" />
+                          <div className="h-6 bg-muted rounded w-20" />
+                        </div>
+                        <div className="space-y-2">
+                          <div className="h-4 bg-muted rounded w-full" />
+                          <div className="h-4 bg-muted rounded w-3/4" />
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              ) : userOrders.length === 0 ? (
+                <div className="text-center py-16">
+                  <ShoppingCart className="w-16 h-16 mx-auto text-muted-foreground mb-4" />
+                  <h3 className="text-xl font-semibold mb-2">No pending orders</h3>
+                  <p className="text-muted-foreground mb-4">
+                    Orders from this shop awaiting your confirmation will appear here.
+                  </p>
+                  <Button onClick={() => setActiveTab('products')}>
+                    Browse Products
+                  </Button>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {userOrders.map((order) => (
+                    <Card key={order.id} className="overflow-hidden">
+                      <CardContent className="p-6">
+                        <div className="flex items-center justify-between mb-4">
+                          <div>
+                            <h3 className="font-semibold">Order #{order.order_number}</h3>
+                            <p className="text-sm text-muted-foreground">
+                              {new Date(order.created_at).toLocaleDateString()}
+                            </p>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-2xl font-bold text-primary">₦{order.total.toLocaleString()}</p>
+                            <Badge variant="secondary" className="mt-1">
+                              Paid
+                            </Badge>
+                          </div>
+                        </div>
+
+                        <div className="space-y-3 mb-4">
+                          {order.order_items.slice(0, 2).map((item, index) => (
+                            <div key={index} className="flex items-center justify-between py-2">
+                              <div className="flex items-center gap-3">
+                                <Package className="w-4 h-4 text-muted-foreground" />
+                                <span className="text-sm">{item.product_name}</span>
+                                <Badge variant="secondary" className="text-xs">
+                                  {item.quantity}x
+                                </Badge>
+                              </div>
+                              <span className="text-sm font-medium">₦{item.total_price.toLocaleString()}</span>
+                            </div>
+                          ))}
+                          {order.order_items.length > 2 && (
+                            <p className="text-sm text-muted-foreground">
+                              +{order.order_items.length - 2} more items
+                            </p>
+                          )}
+                        </div>
+
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <Clock className="w-4 h-4 text-muted-foreground" />
+                            <span className="text-sm text-muted-foreground">
+                              Awaiting your confirmation
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Button
+                              onClick={() => confirmReceiptMutation.mutate(order.id)}
+                              disabled={confirmReceiptMutation.isPending}
+                              className="bg-green-600 hover:bg-green-700"
+                            >
+                              {confirmReceiptMutation.isPending ? (
+                                <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                              ) : (
+                                <CheckCircle className="w-4 h-4 mr-2" />
+                              )}
+                              Confirm Receipt
+                            </Button>
+                            <Button
+                              variant="outline"
+                              onClick={() => setRatingOpenFor(ratingOpenFor === order.id ? null : order.id)}
+                            >
+                              Rate Seller
+                            </Button>
+                          </div>
+                        </div>
+                        {ratingOpenFor === order.id && (
+                          <div className="mt-4 border-t pt-4">
+                            <div className="flex items-center gap-2 mb-2">
+                              {[1,2,3,4,5].map((s) => (
+                                <button key={s} onClick={() => setRatingValue(s)} className={cn('p-1', ratingValue >= s ? 'text-yellow-400' : 'text-muted-foreground')}>
+                                  <Star className="w-5 h-5" />
+                                </button>
+                              ))}
+                            </div>
+                            <textarea value={ratingReview} onChange={(e) => setRatingReview(e.target.value)} className="w-full p-2 border rounded-md mb-2" placeholder="Write a short review (optional)" />
+                            <div className="flex gap-2">
+                              <Button onClick={async () => {
+                                const { data: userData } = await supabase.auth.getUser();
+                                const buyerId = userData?.data?.user?.id;
+                                // Allow anonymous ratings
+                                const { error } = await supabase.from('seller_ratings').insert({ 
+                                  seller_id: shop.owner_id, 
+                                  buyer_id: buyerId || null, 
+                                  rating: ratingValue, 
+                                  review: ratingReview 
+                                });
+                                if (error) return toast.error('Failed to submit rating');
+                                toast.success('Rating submitted');
+                                setRatingOpenFor(null);
+                                setRatingReview('');
+                              }}>Submit Rating</Button>
+                              <Button variant="outline" onClick={() => setRatingOpenFor(null)}>Cancel</Button>
+                            </div>
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              )}
+            </TabsContent>
+          </Tabs>
+        )}
+
+        {/* Products Content */}
+        <div>
+          {/* Section Header */}
+            <div className="flex items-center justify-between mb-6">
+              <div>
+                <h2 className="text-xl sm:text-2xl font-bold flex items-center gap-2">
+                  <Package className="w-6 h-6 text-primary" />
+                  {selectedCategory 
+                    ? categories?.find(c => c.id === selectedCategory)?.name 
+                    : 'All Products'}
+                </h2>
+                <p className="text-muted-foreground text-sm mt-1">
+                  {filteredProducts?.length || 0} products available
+                </p>
+              </div>
+            </div>
 
         {/* Products Grid */}
         {productsLoading ? (
@@ -332,27 +593,16 @@ function ShopContent() {
             <h3 className="text-xl font-semibold mb-2">No products found</h3>
             <p className="text-muted-foreground max-w-md mx-auto">
               {searchQuery 
-                ? `No products match "${searchQuery}". Try a different search term.`
-                : "This shop hasn't added any products yet. Check back soon!"}
+                ? 'No products match your search. Try a different search term.'
+                : 'This shop hasn\'t added any products yet. Check back soon!'}
             </p>
           </div>
         )}
+        </div>
       </main>
 
-      {/* Floating WhatsApp Button */}
-      {shop.whatsapp_number && (
-        <a
-          href={`https://wa.me/${shop.whatsapp_number.replace(/\D/g, '')}?text=Hi, I'm interested in your products!`}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="fixed bottom-6 right-6 bg-green-500 hover:bg-green-600 text-white p-4 rounded-full shadow-xl shadow-green-500/30 transition-all hover:scale-110 hover:shadow-2xl hover:shadow-green-500/40 z-50 group"
-        >
-          <MessageCircle className="h-6 w-6" />
-          <span className="absolute right-full mr-3 top-1/2 -translate-y-1/2 bg-white text-gray-800 px-4 py-2 rounded-full text-sm font-medium shadow-lg whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity">
-            Chat with us!
-          </span>
-        </a>
-      )}
+      {/* Floating Message Button (opens/creates conversation) */}
+      <FloatingMessageButton shop={shop} />
 
       {/* Footer */}
       <footer className="bg-muted/50 border-t py-12 mt-12">
@@ -384,6 +634,48 @@ function ShopContent() {
           </div>
         </div>
       </footer>
+
+      {/* Payment Success Dialog */}
+      <Dialog open={showPaymentSuccess} onOpenChange={setShowPaymentSuccess}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <CheckCircle className="h-5 w-5 text-green-500" />
+              Payment Successful!
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Your payment has been processed successfully. Here's your redemption code:
+            </p>
+            {redemptionCode && (
+              <div className="text-center">
+                <div className="font-mono text-2xl font-bold text-primary bg-muted px-4 py-3 rounded-lg border-2 border-dashed border-primary/30">
+                  {redemptionCode}
+                </div>
+                <p className="text-xs text-muted-foreground mt-2">
+                  Take this code to the shop to complete your purchase.
+                </p>
+              </div>
+            )}
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                onClick={() => setShowPaymentSuccess(false)}
+                className="flex-1"
+              >
+                Continue Shopping
+              </Button>
+              <Link to="/redeem" className="flex-1">
+                <Button className="w-full">
+                  <QrCode className="h-4 w-4 mr-2" />
+                  Redeem Code
+                </Button>
+              </Link>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -393,5 +685,55 @@ export default function Shop() {
     <CartProvider>
       <ShopContent />
     </CartProvider>
+  );
+}
+
+function FloatingMessageButton({ shop }: { shop: any }) {
+  const navigate = useNavigate();
+
+  if (!shop) return null;
+
+  const openConversation = async () => {
+    const { data: userData } = await supabase.auth.getUser();
+    const buyerId = userData?.data?.user?.id;
+    if (!buyerId) {
+      toast.error('You must have a seller account to message sellers. Please sign up as a seller first.');
+      navigate('/auth');
+      return;
+    }
+
+    // find existing conversation
+    const { data: existing } = await supabase
+      .from('conversations')
+      .select('*')
+      .eq('shop_id', shop.id)
+      .eq('buyer_id', buyerId)
+      .maybeSingle();
+
+    let convId = existing?.id;
+    if (!convId) {
+      const { data: inserted, error } = await supabase
+        .from('conversations')
+        .insert({ shop_id: shop.id, buyer_id: buyerId, last_message: null, last_message_at: null })
+        .select()
+        .maybeSingle();
+      if (error) {
+        toast.error('Failed to start conversation');
+        return;
+      }
+      convId = inserted.id;
+    }
+
+    navigate('/messages', { state: { conversationId: convId } });
+  };
+
+  return (
+    <button
+      onClick={openConversation}
+      className="fixed bottom-6 right-6 bg-primary hover:bg-primary/90 text-white p-4 rounded-full shadow-xl z-50"
+      aria-label="Message seller"
+    >
+      <MessageCircle className="h-6 w-6" />
+    </button>
   );
 }

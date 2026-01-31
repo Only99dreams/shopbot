@@ -1,8 +1,9 @@
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { CheckCircle, Gift, Store, Share2, Copy, Sparkles, ArrowRight } from 'lucide-react';
+import { CheckCircle, Gift, Store, Share2, Copy, Sparkles, ArrowRight, QrCode } from 'lucide-react';
 import { useReferralEarnings } from '@/hooks/usePlatformSettings';
 import { toast } from 'sonner';
+import { useNavigate } from 'react-router-dom';
 
 interface ThankYouModalProps {
   open: boolean;
@@ -10,6 +11,7 @@ interface ThankYouModalProps {
   orderNumber: string;
   shopName: string;
   shopId: string;
+  redemptionCode?: string;
 }
 
 export function ThankYouModal({ 
@@ -17,9 +19,11 @@ export function ThankYouModal({
   onOpenChange, 
   orderNumber, 
   shopName,
-  shopId 
+  shopId,
+  redemptionCode
 }: ThankYouModalProps) {
   const { data: referralEarnings } = useReferralEarnings();
+  const navigate = useNavigate();
   
   const shopUrl = `${window.location.origin}/shop/${shopId}`;
   
@@ -69,8 +73,41 @@ export function ThankYouModal({
         </div>
 
         <div className="p-6 space-y-5">
+          {redemptionCode && (
+            <div className="bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-950/50 dark:to-indigo-950/50 rounded-2xl p-5 space-y-4 border border-blue-200 dark:border-blue-800">
+              <div className="flex items-center justify-center gap-2">
+                <div className="w-8 h-8 rounded-full bg-blue-100 dark:bg-blue-900/50 flex items-center justify-center">
+                  <QrCode className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                </div>
+                <h3 className="font-bold text-foreground">
+                  Your Redemption Code
+                </h3>
+              </div>
+              
+              <div className="text-center">
+                <div className="font-mono text-2xl font-bold text-blue-600 dark:text-blue-400 bg-white dark:bg-gray-800 px-4 py-2 rounded-lg border-2 border-dashed border-blue-300 dark:border-blue-700 inline-block">
+                  {redemptionCode}
+                </div>
+                <p className="text-xs text-muted-foreground mt-2">
+                  Keep this code safe. You'll need it to confirm delivery.
+                </p>
+              </div>
+
+              <Button 
+                onClick={() => navigate('/redeem')}
+                className="w-full bg-blue-600 hover:bg-blue-700"
+              >
+                <QrCode className="w-4 h-4 mr-2" />
+                Redeem Code
+              </Button>
+            </div>
+          )}
+
           <p className="text-sm text-center text-muted-foreground">
-            Once your payment is verified, you'll receive a confirmation from the seller.
+            {redemptionCode 
+              ? "Take this code to the shop to complete your purchase."
+              : "Once your payment is verified, you'll receive a redemption code to complete your purchase."
+            }
           </p>
 
           {/* Start Your Own Shop Section */}

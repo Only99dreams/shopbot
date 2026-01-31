@@ -108,7 +108,7 @@ export default function AdminDashboard() {
             <h1 className="text-2xl lg:text-3xl font-bold">Admin Dashboard</h1>
             <p className="text-muted-foreground">Monitor and manage the platform</p>
           </div>
-          <Button>Export Report</Button>
+          <Button className="w-full md:w-auto">Export Report</Button>
         </div>
 
         {/* Alerts */}
@@ -158,28 +158,50 @@ export default function AdminDashboard() {
               <Skeleton className="h-32" />
             </div>
           ) : orders && orders.length > 0 ? (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Order #</TableHead>
-                  <TableHead>Shop</TableHead>
-                  <TableHead>Total</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Date</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
+            <>
+              {/* Mobile card list */}
+              <div className="lg:hidden space-y-4 p-4">
                 {orders.map((order) => (
-                  <TableRow key={order.id}>
-                    <TableCell className="font-medium">{order.order_number}</TableCell>
-                    <TableCell>{(order.shops as any)?.name || 'Unknown'}</TableCell>
-                    <TableCell>₦{Number(order.total).toLocaleString()}</TableCell>
-                    <TableCell>{getStatusBadge(order.status)}</TableCell>
-                    <TableCell>{format(new Date(order.created_at), 'MMM d, yyyy')}</TableCell>
-                  </TableRow>
+                  <div key={order.id} className="bg-card rounded-xl border border-border p-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="font-medium">{order.order_number}</div>
+                      <div className="text-xs text-muted-foreground">{format(new Date(order.created_at), 'MMM d, yyyy')}</div>
+                    </div>
+                    <div className="text-sm text-muted-foreground mb-2">{(order.shops as any)?.name || 'Unknown'}</div>
+                    <div className="flex items-center justify-between">
+                      <div className="font-medium">₦{Number(order.total).toLocaleString()}</div>
+                      <div>{getStatusBadge(order.status)}</div>
+                    </div>
+                  </div>
                 ))}
-              </TableBody>
-            </Table>
+              </div>
+
+              {/* Desktop table view */}
+              <div className="hidden lg:block">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Order #</TableHead>
+                      <TableHead>Shop</TableHead>
+                      <TableHead>Total</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Date</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {orders.map((order) => (
+                      <TableRow key={order.id}>
+                        <TableCell className="font-medium">{order.order_number}</TableCell>
+                        <TableCell>{(order.shops as any)?.name || 'Unknown'}</TableCell>
+                        <TableCell>₦{Number(order.total).toLocaleString()}</TableCell>
+                        <TableCell>{getStatusBadge(order.status)}</TableCell>
+                        <TableCell>{format(new Date(order.created_at), 'MMM d, yyyy')}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </>
           ) : (
             <div className="p-12 text-center">
               <ShoppingCart className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
@@ -207,28 +229,50 @@ export default function AdminDashboard() {
               <Skeleton className="h-32" />
             </div>
           ) : shops && shops.length > 0 ? (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Shop Name</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Created</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {shops.slice(0, 5).map((shop) => (
-                  <TableRow key={shop.id}>
-                    <TableCell className="font-medium">{shop.name}</TableCell>
-                    <TableCell>
-                      <Badge className={shop.is_active ? 'bg-green-500/10 text-green-500' : 'bg-red-500/10 text-red-500'}>
-                        {shop.is_active ? 'Active' : 'Inactive'}
+            <>
+              {/* Mobile card list */}
+              <div className="lg:hidden space-y-4 p-4">
+                {shops.slice(0, 5).map((s) => (
+                  <div key={s.id} className="bg-card rounded-xl border border-border p-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="font-medium">{s.name}</div>
+                      <div className="text-xs text-muted-foreground">{format(new Date(s.created_at), 'MMM d, yyyy')}</div>
+                    </div>
+                    <div>
+                      <Badge className={s.is_active ? 'bg-green-500/10 text-green-500' : 'bg-red-500/10 text-red-500'}>
+                        {s.is_active ? 'Active' : 'Inactive'}
                       </Badge>
-                    </TableCell>
-                    <TableCell>{format(new Date(shop.created_at), 'MMM d, yyyy')}</TableCell>
-                  </TableRow>
+                    </div>
+                  </div>
                 ))}
-              </TableBody>
-            </Table>
+              </div>
+
+              {/* Desktop table view */}
+              <div className="hidden lg:block">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Shop Name</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Created</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {shops.slice(0, 5).map((shop) => (
+                      <TableRow key={shop.id}>
+                        <TableCell className="font-medium">{shop.name}</TableCell>
+                        <TableCell>
+                          <Badge className={shop.is_active ? 'bg-green-500/10 text-green-500' : 'bg-red-500/10 text-red-500'}>
+                            {shop.is_active ? 'Active' : 'Inactive'}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>{format(new Date(shop.created_at), 'MMM d, yyyy')}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </>
           ) : (
             <div className="p-12 text-center">
               <Store className="h-12 w-12 mx-auto text-muted-foreground mb-4" />

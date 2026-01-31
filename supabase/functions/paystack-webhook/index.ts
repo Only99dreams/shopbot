@@ -91,6 +91,31 @@ serve(async (req) => {
         console.error('Error updating order:', orderError);
       }
 
+      // Generate redemption code for the order
+      const { data: codeData, error: codeError } = await supabase
+        .rpc('generate_redemption_code');
+
+      if (codeError) {
+        console.error('Error generating redemption code:', codeError);
+      } else {
+        console.log('Generated redemption code:', codeData);
+        
+        // Insert redemption code record
+        const { error: insertError } = await supabase
+          .from('redemption_codes')
+          .insert({
+            order_id: orderId,
+            shop_id: shopId,
+            code: codeData,
+          });
+
+        if (insertError) {
+          console.error('Error inserting redemption code:', insertError);
+        } else {
+          console.log('Redemption code created successfully');
+        }
+      }
+
       // Credit seller wallet (admin will manually transfer later)
       if (payment) {
         // Get or create seller wallet

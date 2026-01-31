@@ -75,6 +75,33 @@ serve(async (req) => {
           })
           .eq('id', payment.order_id);
 
+        // Generate redemption code for the order
+        const { data: redemptionCode, error: codeError } = await supabase
+          .rpc('generate_redemption_code');
+
+        if (!codeError && redemptionCode) {
+          const { data: codeRecord, error: insertError } = await supabase
+            .from('redemption_codes')
+            .insert({
+              order_id: payment.order_id,
+              shop_id: payment.shop_id,
+              code: redemptionCode,
+              status: 'active',
+            })
+            .select()
+            .single();
+
+          if (!insertError && codeRecord) {
+            // Update order with redemption code reference
+            await supabase
+              .from('orders')
+              .update({
+                redemption_code_id: codeRecord.id,
+              })
+              .eq('id', payment.order_id);
+          }
+        }
+
         // Credit seller wallet
         const { data: wallet } = await supabase
           .from('seller_wallets')

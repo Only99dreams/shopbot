@@ -44,6 +44,11 @@ export default function AdminSellersManagement() {
         .from('orders')
         .select('shop_id, total, payment_status');
 
+      // Fetch ratings
+      const { data: ratings } = await supabase
+        .from('seller_ratings')
+        .select('seller_id, rating');
+
       // Map shops to profiles with stats
       return profiles.map(profile => {
         const shop = shops.find(s => s.owner_id === profile.id);
@@ -51,6 +56,10 @@ export default function AdminSellersManagement() {
         const totalOrders = shopOrders?.length || 0;
         const totalRevenue = shopOrders?.filter(o => o.payment_status === 'paid').reduce((sum, o) => sum + Number(o.total), 0) || 0;
         
+        const sellerRatings = ratings?.filter(r => r.seller_id === profile.id) || [];
+        const ratingCount = sellerRatings.length;
+        const ratingAvg = ratingCount > 0 ? (sellerRatings.reduce((s, r) => s + Number(r.rating), 0) / ratingCount) : null;
+
         return {
           ...profile,
           shop: shop || null,
@@ -58,12 +67,14 @@ export default function AdminSellersManagement() {
           subscription: shop?.subscriptions?.[0] || null,
           totalOrders,
           totalRevenue,
+          ratingAvg,
+          ratingCount,
         };
       });
     }
   });
 
-  // Toggle shop active status
+  // Toggle shop active status with optimistic updates
   const toggleShopStatus = useMutation({
     mutationFn: async ({ shopId, isActive }: { shopId: string, isActive: boolean }) => {
       const { error } = await supabase
@@ -72,8 +83,30 @@ export default function AdminSellersManagement() {
         .eq('id', shopId);
       if (error) throw error;
     },
-    onSuccess: () => {
+    onMutate: async ({ shopId, isActive }) => {
+      await queryClient.cancelQueries({ queryKey: ['admin-sellers-full'] });
+      const previous = queryClient.getQueryData<any[]>(['admin-sellers-full']);
+      queryClient.setQueryData(['admin-sellers-full'], (old: any[]) => {
+        if (!old) return old;
+        return old.map(item => {
+          if (item.shop && item.shop.id === shopId) {
+            return { ...item, shop: { ...item.shop, is_active: isActive } };
+          }
+          return item;
+        });
+      });
+      return { previous };
+    },
+    onError: (_err, _vars, context: any) => {
+      if (context?.previous) {
+        queryClient.setQueryData(['admin-sellers-full'], context.previous);
+      }
+      toast.error('Failed to update shop status');
+    },
+    onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-sellers-full'] });
+    },
+    onSuccess: () => {
       toast.success('Shop status updated');
     }
   });
@@ -86,7 +119,6 @@ export default function AdminSellersManagement() {
         .update({
           name: shopData.name,
           description: shopData.description,
-          whatsapp_number: shopData.whatsapp_number,
           bank_name: shopData.bank_name,
           account_number: shopData.account_number,
           account_name: shopData.account_name,
@@ -182,6 +214,7 @@ export default function AdminSellersManagement() {
                 <TableRow>
                   <TableHead>Seller</TableHead>
                   <TableHead>Shop</TableHead>
+                  <TableHead>Rating</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Orders</TableHead>
                   <TableHead>Revenue</TableHead>
@@ -193,11 +226,11 @@ export default function AdminSellersManagement() {
               <TableBody>
                 {isLoading ? (
                   <TableRow>
-                    <TableCell colSpan={8} className="text-center py-8">Loading...</TableCell>
+                    <TableCell colSpan={9} className="text-center py-8">Loading...</TableCell>
                   </TableRow>
                 ) : filtered?.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
+                    <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
                       No sellers found
                     </TableCell>
                   </TableRow>
@@ -212,10 +245,19 @@ export default function AdminSellersManagement() {
                       {seller.shop ? (
                         <div>
                           <div className="font-medium">{seller.shop.name}</div>
-                          <div className="text-sm text-muted-foreground">{seller.shop.whatsapp_number || 'No WhatsApp'}</div>
                         </div>
                       ) : (
                         <span className="text-muted-foreground">No shop</span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {seller.ratingAvg ? (
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium">{Number(seller.ratingAvg).toFixed(1)}</span>
+                          <span className="text-xs text-muted-foreground">({seller.ratingCount})</span>
+                        </div>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
                       )}
                     </TableCell>
                     <TableCell>
@@ -306,10 +348,7 @@ export default function AdminSellersManagement() {
                       <p className="text-sm text-muted-foreground">Shop Name</p>
                       <p className="font-medium">{selectedSeller.shop.name}</p>
                     </div>
-                    <div>
-                      <p className="text-sm text-muted-foreground">WhatsApp</p>
-                      <p className="font-medium">{selectedSeller.shop.whatsapp_number || 'N/A'}</p>
-                    </div>
+                    {/* WhatsApp removed — using in-app messages instead */}
                     <div>
                       <p className="text-sm text-muted-foreground">Description</p>
                       <p className="font-medium">{selectedSeller.shop.description || 'No description'}</p>
@@ -387,13 +426,7 @@ export default function AdminSellersManagement() {
                 onChange={(e) => setEditingShop({ ...editingShop, description: e.target.value })}
               />
             </div>
-            <div className="space-y-2">
-              <Label>WhatsApp Number</Label>
-              <Input
-                value={editingShop?.whatsapp_number || ''}
-                onChange={(e) => setEditingShop({ ...editingShop, whatsapp_number: e.target.value })}
-              />
-            </div>
+            {/* WhatsApp field removed — storing in-app messaging instead */}
             <div className="space-y-2">
               <Label>Bank Name</Label>
               <Input

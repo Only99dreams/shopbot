@@ -27,9 +27,16 @@ import {
   BarChart3,
   Users,
   Zap,
-  TrendingDown
+  TrendingDown,
+  ShoppingCart,
+  CheckCircle,
+  Clock,
+  Loader2
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useAuth } from '@/hooks/useAuth';
+import { useMutation } from '@tanstack/react-query';
+import { toast } from 'sonner';
 
 // Nigerian states for location filter
 const NIGERIAN_STATES = [
@@ -88,7 +95,10 @@ export default function Marketplace() {
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [sortBy, setSortBy] = useState<'price-low' | 'price-high' | 'newest' | 'popular'>('popular');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
-  const [activeTab, setActiveTab] = useState<'products' | 'shops'>('products');
+  const [activeTab, setActiveTab] = useState<'products' | 'shops' | 'orders'>('products');
+  const [orderNumber, setOrderNumber] = useState('');
+  const [trackedOrder, setTrackedOrder] = useState<any>(null);
+  const { user } = useAuth();
 
   // Reset city when state changes
   useEffect(() => {
@@ -170,17 +180,61 @@ export default function Marketplace() {
     }
   });
 
-  // Get unique cities/areas from shops for the area filter
-  const availableCities = useMemo(() => {
-    if (!shops) return [];
-    const cities = new Set<string>();
-    shops.forEach(shop => {
-      if (shop.city) {
-        cities.add(shop.city);
-      }
-    });
-    return Array.from(cities).sort();
-  }, [shops]);
+  // Confirm receipt mutation
+  const confirmReceiptMutation = useMutation({
+    mutationFn: async (orderId: string) => {
+      const { data, error } = await supabase.functions.invoke('redeem-code', {
+        body: { code: 'DIRECT_CONFIRM', action: 'confirm_receipt', orderId },
+      });
+
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      toast.success('Receipt confirmed! Seller has been credited.');
+      // Update the tracked order to reflect confirmation
+      setTrackedOrder(prev => prev ? { ...prev, redemption_confirmed: true } : null);
+    },
+    onError: (error: any) => {
+      console.error('Confirm receipt error:', error);
+      toast.error(error.message || 'Failed to confirm receipt');
+    },
+  });
+
+  // Track order by order number
+  const trackOrderMutation = useMutation({
+    mutationFn: async (orderNum: string) => {
+      const { data, error } = await supabase
+        .from('orders')
+        .select(`
+          *,
+          shops (
+            id,
+            name,
+            logo_url
+          ),
+          order_items (
+            product_name,
+            quantity,
+            unit_price,
+            total_price
+          )
+        `)
+        .eq('order_number', orderNum)
+        .eq('payment_status', 'paid')
+        .single();
+
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: (data) => {
+      setTrackedOrder(data);
+    },
+    onError: (error: any) => {
+      toast.error('Order not found or not eligible for tracking');
+      setTrackedOrder(null);
+    },
+  });
 
   // Filter and sort products
   const filteredProducts = useMemo(() => {
@@ -440,9 +494,9 @@ export default function Marketplace() {
         )}
 
         {/* Main Content Tabs */}
-        <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'products' | 'shops')}>
+        <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'products' | 'shops' | 'orders')}>
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
-            <TabsList className="h-12 p-1 bg-muted/50">
+            <TabsList className={cn("h-12 p-1 bg-muted/50", user ? "grid grid-cols-3" : "")}>
               <TabsTrigger value="products" className="h-10 px-6 rounded-lg data-[state=active]:shadow-sm">
                 <Package className="w-4 h-4 mr-2" />
                 Products
@@ -451,6 +505,12 @@ export default function Marketplace() {
                 <Store className="w-4 h-4 mr-2" />
                 Shops
               </TabsTrigger>
+              {user && (
+                <TabsTrigger value="orders" className="h-10 px-6 rounded-lg data-[state=active]:shadow-sm">
+                  <ShoppingCart className="w-4 h-4 mr-2" />
+                  My Orders
+                </TabsTrigger>
+              )}
             </TabsList>
 
             <div className="flex items-center gap-3">
@@ -579,6 +639,109 @@ export default function Marketplace() {
                 {filteredShops.map((shop) => (
                   <ShopCard key={shop.id} shop={shop} />
                 ))}
+              </div>
+            )}
+          </TabsContent>
+
+          <TabsContent value="orders" className="mt-0">
+            {!trackedOrder ? (
+              // Order tracking form
+              <div className="max-w-md mx-auto">
+                <div className="text-center py-16">
+                  <Package className="w-16 h-16 mx-auto text-muted-foreground mb-4" />
+                  <h3 className="text-xl font-semibold mb-2">Track Your Order</h3>
+                  <p className="text-muted-foreground mb-6">
+                    Enter your order number to track and confirm receipt.
+                  </p>
+                  <div className="space-y-4">
+                    <Input
+                      placeholder="Enter order number (e.g., ORD-ABC123)"
+                      value={orderNumber}
+                      onChange={(e) => setOrderNumber(e.target.value)}
+                      className="text-center"
+                    />
+                    <Button 
+                      className="w-full" 
+                      onClick={() => trackOrderMutation.mutate(orderNumber)}
+                      disabled={!orderNumber.trim() || trackOrderMutation.isPending}
+                    >
+                      {trackOrderMutation.isPending ? 'Tracking...' : 'Track Order'}
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              // Show tracked order
+              <div className="max-w-2xl mx-auto py-8">
+                <Card className="overflow-hidden">
+                  <CardContent className="p-6">
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="flex items-center gap-3">
+                        <div className="w-12 h-12 rounded-full bg-muted overflow-hidden">
+                          {trackedOrder.shops?.logo_url ? (
+                            <img src={trackedOrder.shops.logo_url} alt="" className="w-full h-full object-cover" />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center text-muted-foreground">
+                              <Store className="w-6 h-6" />
+                            </div>
+                          )}
+                        </div>
+                        <div>
+                          <h3 className="font-semibold">{trackedOrder.shops?.name}</h3>
+                          <p className="text-sm text-muted-foreground">Order #{trackedOrder.order_number}</p>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-2xl font-bold text-primary">₦{trackedOrder.total.toLocaleString()}</p>
+                        <p className="text-sm text-muted-foreground">
+                          {new Date(trackedOrder.created_at).toLocaleDateString()}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="space-y-3 mb-4">
+                      {trackedOrder.order_items.map((item: any, index: number) => (
+                        <div key={index} className="flex items-center justify-between py-2">
+                          <div className="flex items-center gap-3">
+                            <Package className="w-4 h-4 text-muted-foreground" />
+                            <span className="text-sm">{item.product_name}</span>
+                            <Badge variant="secondary" className="text-xs">
+                              {item.quantity}x
+                            </Badge>
+                          </div>
+                          <span className="text-sm font-medium">₦{item.total_price.toLocaleString()}</span>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="flex gap-3">
+                      <Button 
+                        variant="outline" 
+                        className="flex-1"
+                        onClick={() => {
+                          setTrackedOrder(null);
+                          setOrderNumber('');
+                        }}
+                      >
+                        Track Another Order
+                      </Button>
+                      {!trackedOrder.redemption_confirmed && (
+                        <Button 
+                          className="flex-1"
+                          onClick={() => confirmReceiptMutation.mutate(trackedOrder.id)}
+                          disabled={confirmReceiptMutation.isPending}
+                        >
+                          {confirmReceiptMutation.isPending ? (
+                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          ) : (
+                            <CheckCircle className="w-4 h-4 mr-2" />
+                          )}
+                          Confirm Receipt
+                        </Button>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
               </div>
             )}
           </TabsContent>

@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useMutation } from '@tanstack/react-query';
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -6,7 +7,8 @@ import {
   Search, 
   ShoppingCart,
   Loader2,
-  Eye
+  Eye,
+  QrCode
 } from "lucide-react";
 import {
   Select,
@@ -18,6 +20,8 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { useShop } from "@/hooks/useShop";
 import { useToast } from "@/hooks/use-toast";
+import { RedemptionCodeModal } from "@/components/RedemptionCodeModal";
+import { OrderDetailsModal } from "@/components/OrderDetailsModal";
 
 interface Order {
   id: string;
@@ -25,10 +29,15 @@ interface Order {
   status: string;
   total: number;
   payment_status: string;
+  redemption_confirmed: boolean;
   created_at: string;
   customers: {
     name: string | null;
     phone: string;
+  } | null;
+  redemption_codes: {
+    code: string;
+    status: string;
   } | null;
 }
 
@@ -45,6 +54,7 @@ export default function Orders() {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [viewingOrderId, setViewingOrderId] = useState<string | null>(null);
 
   const { shop } = useShop();
   const { toast } = useToast();
@@ -62,7 +72,8 @@ export default function Orders() {
       .from('orders')
       .select(`
         *,
-        customers (name, phone)
+        customers (name, phone),
+        redemption_codes!order_id (code, status)
       `)
       .eq('shop_id', shop.id)
       .order('created_at', { ascending: false });
@@ -75,26 +86,32 @@ export default function Orders() {
     setLoading(false);
   };
 
-  const updateOrderStatus = async (orderId: string, newStatus: string) => {
-    const { error } = await supabase
-      .from('orders')
-      .update({ status: newStatus })
-      .eq('id', orderId);
-
-    if (error) {
-      toast({
-        title: "Error",
-        description: error.message,
-        variant: "destructive"
-      });
-    } else {
-      toast({
-        title: "Order updated",
-        description: `Order status changed to ${newStatus}.`
-      });
+  const updateStatusMutation = useMutation({
+    mutationFn: async ({ orderId, newStatus }: { orderId: string; newStatus: string }) => {
+      const { error } = await supabase
+        .from('orders')
+        .update({ status: newStatus })
+        .eq('id', orderId);
+      if (error) throw error;
+      return { orderId, newStatus };
+    },
+    onMutate: async ({ orderId, newStatus }) => {
+      // optimistic update
+      const previous = orders;
+      setOrders((prev) => prev.map(o => o.id === orderId ? { ...o, status: newStatus } : o));
+      return { previous };
+    },
+    onError: (err: any, _vars, context: any) => {
+      setOrders(context?.previous || []);
+      toast({ title: 'Error', description: err.message || 'Failed to update order', variant: 'destructive' });
+    },
+    onSuccess: (_data) => {
+      toast({ title: 'Order updated', description: 'Order status changed.' });
       fetchOrders();
     }
-  };
+  });
+
+  const updateOrderStatus = (orderId: string, newStatus: string) => updateStatusMutation.mutate({ orderId, newStatus });
 
   const filteredOrders = orders.filter(order => {
     const matchesSearch = order.order_number.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -112,6 +129,16 @@ export default function Orders() {
             <h1 className="text-2xl lg:text-3xl font-bold">Orders</h1>
             <p className="text-muted-foreground">Manage customer orders</p>
           </div>
+          <RedemptionCodeModal
+            mode="confirm_delivery"
+            onSuccess={fetchOrders}
+            trigger={
+              <Button variant="outline">
+                <QrCode className="h-4 w-4 mr-2" />
+                Redeem Code
+              </Button>
+            }
+          />
         </div>
 
         {/* Filters */}
@@ -187,9 +214,23 @@ export default function Orders() {
                       {order.payment_status}
                     </span>
                   </div>
+                  {order.redemption_codes && (
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-muted-foreground">Code</span>
+                      <span className="font-mono text-xs bg-muted px-2 py-1 rounded">
+                        {order.redemption_codes.code}
+                      </span>
+                    </div>
+                  )}
                   <div className="flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground">Date</span>
-                    <span>{new Date(order.created_at).toLocaleDateString()}</span>
+                    <span className="text-muted-foreground">Redemption</span>
+                    <span className={`text-xs font-medium px-2 py-1 rounded-full ${
+                      order.redemption_confirmed
+                        ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                        : 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400'
+                    }`}>
+                      {order.redemption_confirmed ? 'Confirmed' : 'Pending'}
+                    </span>
                   </div>
                   <div className="flex items-center gap-2 pt-2 border-t border-border">
                     <Select value={order.status} onValueChange={(value) => updateOrderStatus(order.id, value)}>
@@ -204,7 +245,7 @@ export default function Orders() {
                         <SelectItem value="cancelled">Cancelled</SelectItem>
                       </SelectContent>
                     </Select>
-                    <Button variant="outline" size="sm">
+                    <Button variant="outline" size="sm" onClick={() => setViewingOrderId(order.id)}>
                       <Eye className="h-4 w-4" />
                     </Button>
                   </div>
@@ -222,6 +263,8 @@ export default function Orders() {
                       <th className="text-left p-4 text-sm font-medium text-muted-foreground">Customer</th>
                       <th className="text-left p-4 text-sm font-medium text-muted-foreground">Total</th>
                       <th className="text-left p-4 text-sm font-medium text-muted-foreground">Payment</th>
+                      <th className="text-left p-4 text-sm font-medium text-muted-foreground">Code</th>
+                      <th className="text-left p-4 text-sm font-medium text-muted-foreground">Redemption</th>
                       <th className="text-left p-4 text-sm font-medium text-muted-foreground">Status</th>
                       <th className="text-left p-4 text-sm font-medium text-muted-foreground">Date</th>
                       <th className="text-right p-4 text-sm font-medium text-muted-foreground">Actions</th>
@@ -248,6 +291,24 @@ export default function Orders() {
                           </span>
                         </td>
                         <td className="p-4">
+                          {order.redemption_codes ? (
+                            <span className="font-mono text-xs bg-muted px-2 py-1 rounded">
+                              {order.redemption_codes.code}
+                            </span>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">-</span>
+                          )}
+                        </td>
+                        <td className="p-4">
+                          <span className={`text-xs font-medium px-2 py-1 rounded-full ${
+                            order.redemption_confirmed
+                              ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                              : 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400'
+                          }`}>
+                            {order.redemption_confirmed ? 'Confirmed' : 'Pending'}
+                          </span>
+                        </td>
+                        <td className="p-4">
                           <Select value={order.status} onValueChange={(value) => updateOrderStatus(order.id, value)}>
                             <SelectTrigger className="w-32 h-8">
                               <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${statusColors[order.status]}`}>
@@ -267,7 +328,7 @@ export default function Orders() {
                           {new Date(order.created_at).toLocaleDateString()}
                         </td>
                         <td className="p-4 text-right">
-                          <Button variant="ghost" size="sm">
+                          <Button variant="ghost" size="sm" onClick={() => setViewingOrderId(order.id)}>
                             <Eye className="h-4 w-4" />
                           </Button>
                         </td>
@@ -280,6 +341,12 @@ export default function Orders() {
           </>
         )}
       </div>
+
+      <OrderDetailsModal
+        orderId={viewingOrderId}
+        open={!!viewingOrderId}
+        onOpenChange={(open) => setViewingOrderId(open ? viewingOrderId : null)}
+      />
     </DashboardLayout>
   );
 }

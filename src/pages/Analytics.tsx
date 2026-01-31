@@ -1,36 +1,96 @@
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { TrendingUp, TrendingDown, ShoppingCart, Package, Users, DollarSign } from "lucide-react";
+import { TrendingUp, TrendingDown, ShoppingCart, Package, Users, DollarSign, Loader2 } from "lucide-react";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell } from "recharts";
-
-const salesData = [
-  { name: "Mon", sales: 4000, orders: 24 },
-  { name: "Tue", sales: 3000, orders: 18 },
-  { name: "Wed", sales: 5000, orders: 32 },
-  { name: "Thu", sales: 2780, orders: 15 },
-  { name: "Fri", sales: 6890, orders: 45 },
-  { name: "Sat", sales: 8390, orders: 52 },
-  { name: "Sun", sales: 4490, orders: 28 },
-];
-
-const categoryData = [
-  { name: "T-Shirts", value: 35 },
-  { name: "Shoes", value: 25 },
-  { name: "Accessories", value: 20 },
-  { name: "Bags", value: 12 },
-  { name: "Other", value: 8 },
-];
+import { useAnalytics } from "@/hooks/useAnalytics";
 
 const COLORS = ['hsl(var(--primary))', 'hsl(var(--chart-2))', 'hsl(var(--chart-3))', 'hsl(var(--chart-4))', 'hsl(var(--chart-5))'];
 
-const stats = [
-  { title: "Total Revenue", value: "₦2,450,000", change: "+12.5%", up: true, icon: DollarSign },
-  { title: "Total Orders", value: "1,234", change: "+8.2%", up: true, icon: ShoppingCart },
-  { title: "Products Sold", value: "3,456", change: "+15.3%", up: true, icon: Package },
-  { title: "New Customers", value: "234", change: "-2.1%", up: false, icon: Users },
-];
+const formatCurrency = (amount: number) => {
+  return new Intl.NumberFormat('en-NG', {
+    style: 'currency',
+    currency: 'NGN',
+    minimumFractionDigits: 0,
+  }).format(amount);
+};
+
+const formatChange = (change: number) => {
+  const sign = change >= 0 ? '+' : '';
+  return `${sign}${change.toFixed(1)}%`;
+};
 
 export default function Analytics() {
+  const { data: analytics, isLoading, error } = useAnalytics();
+
+  if (isLoading) {
+    return (
+      <DashboardLayout>
+        <div className="p-6 lg:p-8 flex items-center justify-center min-h-[50vh]">
+          <div className="text-center space-y-4">
+            <Loader2 className="h-8 w-8 animate-spin text-primary mx-auto" />
+            <p className="text-muted-foreground">Loading analytics...</p>
+          </div>
+        </div>
+      </DashboardLayout>
+    );
+  }
+
+  if (error) {
+    return (
+      <DashboardLayout>
+        <div className="p-6 lg:p-8 flex items-center justify-center min-h-[50vh]">
+          <div className="text-center space-y-4">
+            <p className="text-destructive">Failed to load analytics</p>
+            <p className="text-sm text-muted-foreground">{error.message}</p>
+          </div>
+        </div>
+      </DashboardLayout>
+    );
+  }
+
+  if (!analytics) {
+    return (
+      <DashboardLayout>
+        <div className="p-6 lg:p-8 flex items-center justify-center min-h-[50vh]">
+          <div className="text-center space-y-4">
+            <p className="text-muted-foreground">No analytics data available</p>
+          </div>
+        </div>
+      </DashboardLayout>
+    );
+  }
+
+  const stats = [
+    {
+      title: "Total Revenue",
+      value: formatCurrency(analytics.stats.totalRevenue),
+      change: formatChange(analytics.stats.revenueChange),
+      up: analytics.stats.revenueChange >= 0,
+      icon: DollarSign
+    },
+    {
+      title: "Total Orders",
+      value: analytics.stats.totalOrders.toString(),
+      change: formatChange(analytics.stats.ordersChange),
+      up: analytics.stats.ordersChange >= 0,
+      icon: ShoppingCart
+    },
+    {
+      title: "Products Sold",
+      value: analytics.stats.productsSold.toString(),
+      change: formatChange(analytics.stats.productsChange),
+      up: analytics.stats.productsChange >= 0,
+      icon: Package
+    },
+    {
+      title: "New Customers",
+      value: analytics.stats.newCustomers.toString(),
+      change: formatChange(analytics.stats.customersChange),
+      up: analytics.stats.customersChange >= 0,
+      icon: Users
+    },
+  ];
+
   return (
     <DashboardLayout>
       <div className="p-6 lg:p-8 space-y-6">
@@ -73,22 +133,26 @@ export default function Analytics() {
             <CardContent>
               <div className="h-[300px]">
                 <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={salesData}>
+                  <AreaChart data={analytics.salesData}>
                     <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
                     <XAxis dataKey="name" className="text-muted-foreground" />
                     <YAxis className="text-muted-foreground" />
-                    <Tooltip 
-                      contentStyle={{ 
-                        backgroundColor: 'hsl(var(--card))', 
+                    <Tooltip
+                      contentStyle={{
+                        backgroundColor: 'hsl(var(--card))',
                         border: '1px solid hsl(var(--border))',
                         borderRadius: '8px'
                       }}
+                      formatter={(value, name) => [
+                        name === 'sales' ? formatCurrency(value as number) : value,
+                        name === 'sales' ? 'Revenue' : 'Orders'
+                      ]}
                     />
-                    <Area 
-                      type="monotone" 
-                      dataKey="sales" 
-                      stroke="hsl(var(--primary))" 
-                      fill="hsl(var(--primary) / 0.2)" 
+                    <Area
+                      type="monotone"
+                      dataKey="sales"
+                      stroke="hsl(var(--primary))"
+                      fill="hsl(var(--primary) / 0.2)"
                       strokeWidth={2}
                     />
                   </AreaChart>
@@ -105,13 +169,13 @@ export default function Analytics() {
             <CardContent>
               <div className="h-[300px]">
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={salesData}>
+                  <BarChart data={analytics.salesData}>
                     <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
                     <XAxis dataKey="name" className="text-muted-foreground" />
                     <YAxis className="text-muted-foreground" />
-                    <Tooltip 
-                      contentStyle={{ 
-                        backgroundColor: 'hsl(var(--card))', 
+                    <Tooltip
+                      contentStyle={{
+                        backgroundColor: 'hsl(var(--card))',
                         border: '1px solid hsl(var(--border))',
                         borderRadius: '8px'
                       }}
@@ -135,7 +199,7 @@ export default function Analytics() {
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
                     <Pie
-                      data={categoryData}
+                      data={analytics.categoryData}
                       cx="50%"
                       cy="50%"
                       innerRadius={60}
@@ -143,7 +207,7 @@ export default function Analytics() {
                       paddingAngle={5}
                       dataKey="value"
                     >
-                      {categoryData.map((entry, index) => (
+                      {analytics.categoryData.map((entry, index) => (
                         <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                       ))}
                     </Pie>
@@ -152,11 +216,11 @@ export default function Analytics() {
                 </ResponsiveContainer>
               </div>
               <div className="mt-4 space-y-2">
-                {categoryData.map((item, index) => (
+                {analytics.categoryData.map((item, index) => (
                   <div key={item.name} className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      <div 
-                        className="h-3 w-3 rounded-full" 
+                      <div
+                        className="h-3 w-3 rounded-full"
                         style={{ backgroundColor: COLORS[index] }}
                       />
                       <span className="text-sm">{item.name}</span>
@@ -175,24 +239,25 @@ export default function Analytics() {
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                {[
-                  { name: "Classic White Tee", sales: 156, revenue: "₦858,000" },
-                  { name: "Running Sneakers", sales: 124, revenue: "₦2,728,000" },
-                  { name: "Leather Watch", sales: 98, revenue: "₦833,000" },
-                  { name: "Designer Handbag", sales: 87, revenue: "₦1,044,000" },
-                  { name: "Denim Jacket", sales: 65, revenue: "₦975,000" },
-                ].map((product, index) => (
-                  <div key={product.name} className="flex items-center justify-between p-4 rounded-lg bg-muted/50">
-                    <div className="flex items-center gap-4">
-                      <span className="text-lg font-bold text-primary">#{index + 1}</span>
-                      <div>
-                        <h4 className="font-medium">{product.name}</h4>
-                        <p className="text-sm text-muted-foreground">{product.sales} sold</p>
+                {analytics.topProducts.length > 0 ? (
+                  analytics.topProducts.map((product, index) => (
+                    <div key={product.name} className="flex items-center justify-between p-4 rounded-lg bg-muted/50">
+                      <div className="flex items-center gap-4">
+                        <span className="text-lg font-bold text-primary">#{index + 1}</span>
+                        <div>
+                          <h4 className="font-medium">{product.name}</h4>
+                          <p className="text-sm text-muted-foreground">{product.sales} sold</p>
+                        </div>
                       </div>
+                      <span className="font-semibold">{formatCurrency(product.revenue)}</span>
                     </div>
-                    <span className="font-semibold">{product.revenue}</span>
+                  ))
+                ) : (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <p>No sales data available yet</p>
+                    <p className="text-sm">Products will appear here once orders are placed</p>
                   </div>
-                ))}
+                )}
               </div>
             </CardContent>
           </Card>

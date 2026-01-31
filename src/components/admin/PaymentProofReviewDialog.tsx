@@ -129,6 +129,42 @@ export function PaymentProofReviewDialog({
             credited_at: new Date().toISOString(),
           });
 
+        // Generate redemption code for the order
+        const { data: redemptionCode, error: codeError } = await supabase
+          .rpc('generate_redemption_code');
+
+        if (!codeError && redemptionCode) {
+          await supabase
+            .from('redemption_codes')
+            .insert({
+              order_id: proof.reference_id,
+              shop_id: proof.shop_id,
+              code: redemptionCode,
+              status: 'active',
+            });
+
+          // Update order with redemption code reference
+          const { data: codeRecord } = await supabase
+            .from('redemption_codes')
+            .insert({
+              order_id: proof.reference_id,
+              shop_id: proof.shop_id,
+              code: redemptionCode,
+              status: 'active',
+            })
+            .select()
+            .single();
+
+          if (codeRecord) {
+            await supabase
+              .from('orders')
+              .update({
+                redemption_code_id: codeRecord.id,
+              })
+              .eq('id', proof.reference_id);
+          }
+        }
+
         toast.success("Payment approved and credited to seller");
       }
 

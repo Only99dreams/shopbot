@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useLocation } from 'react-router-dom';
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -11,34 +12,85 @@ import { cn } from "@/lib/utils";
 
 interface Conversation {
   id: string;
-  customer_phone: string;
-  customer_name: string | null;
-  last_message: string | null;
-  last_message_at: string;
-  unread_count: number;
+  buyer_id?: string;
+  customer_phone?: string;
+  customer_name?: string | null;
+  last_message?: string | null;
+  last_message_at?: string;
+  unread_count?: number;
 }
 
 interface Message {
   id: string;
-  direction: string;
-  content: string | null;
-  message_type: string;
+  sender_id: string;
+  receiver_id: string;
+  content: string;
+  is_read?: boolean;
   created_at: string;
 }
 
 export default function Messages() {
   const { shop } = useShop();
+  const location = useLocation();
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [selectedConversation, setSelectedConversation] = useState<Conversation | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
   useEffect(() => {
     if (shop?.id) {
       fetchConversations();
     }
   }, [shop?.id]);
+
+  // handle navigation state to open a specific conversation
+  useEffect(() => {
+    const state: any = (location && (location as any).state) || {};
+    const convId = state?.conversationId;
+    if (convId) {
+      (async () => {
+        const { data } = await supabase.from('conversations').select('*').eq('id', convId).maybeSingle();
+        if (data) {
+          setSelectedConversation(data as any);
+          fetchMessages(convId);
+        }
+      })();
+    }
+  }, [location]);
+
+  // real-time listener for new messages
+  useEffect(() => {
+    const channel = supabase.channel('public:messages').on(
+      'postgres_changes',
+      { event: 'INSERT', schema: 'public', table: 'messages' },
+      (payload) => {
+        const msg = payload.new as any;
+        // if message belongs to currently open conversation, append
+        if (selectedConversation?.id && msg.conversation_id === selectedConversation.id) {
+          setMessages((prev) => [...prev, msg]);
+        }
+        // update conversations list (last_message and unread_count)
+        setConversations((prev) => {
+          const exists = prev.find(c => c.id === msg.conversation_id);
+          if (exists) {
+            return prev.map(c => c.id === msg.conversation_id ? { ...c, last_message: msg.content, last_message_at: msg.created_at, unread_count: (c.unread_count || 0) + 1 } : c);
+          }
+          return prev;
+        });
+      }
+    ).subscribe();
+
+    return () => {
+      channel.unsubscribe();
+    };
+  }, [selectedConversation?.id]);
+
+  useEffect(() => {
+    // get current user id
+    supabase.auth.getUser().then(({ data }) => setCurrentUserId(data.user?.id || null));
+  }, []);
 
   useEffect(() => {
     if (selectedConversation?.id) {
@@ -49,44 +101,51 @@ export default function Messages() {
   const fetchConversations = async () => {
     if (!shop?.id) return;
     const { data } = await supabase
-      .from("whatsapp_conversations")
+      .from("conversations")
       .select("*")
       .eq("shop_id", shop.id)
       .order("last_message_at", { ascending: false });
     
-    if (data) setConversations(data);
+    if (data) setConversations(data as any[]);
   };
 
   const fetchMessages = async (conversationId: string) => {
     const { data } = await supabase
-      .from("whatsapp_messages")
+      .from("messages")
       .select("*")
       .eq("conversation_id", conversationId)
       .order("created_at", { ascending: true });
     
-    if (data) setMessages(data);
+    if (data) setMessages(data as any[]);
   };
 
   const sendMessage = async () => {
     if (!newMessage.trim() || !selectedConversation) return;
     
-    // TODO: Integrate with Twilio to actually send the message
-    const { error } = await supabase.from("whatsapp_messages").insert({
+    if (!shop) return;
+    // get current authenticated user via Supabase
+    const { data: userData } = await supabase.auth.getUser();
+    const sender = userData?.user?.id || null;
+    if (!sender) return;
+
+      const { error } = await supabase.from("messages").insert({
       conversation_id: selectedConversation.id,
-      direction: "outbound",
+      sender_id: sender,
+      receiver_id: (selectedConversation as any).buyer_id,
       content: newMessage,
-      message_type: "text",
+      is_read: false,
     });
 
     if (!error) {
       setNewMessage("");
-      fetchMessages(selectedConversation.id);
-      
-      // Update last message
-      await supabase.from("whatsapp_conversations").update({
+      await fetchMessages(selectedConversation.id);
+      // Update conversation last_message and unread_count
+      await supabase.from("conversations").update({
         last_message: newMessage,
         last_message_at: new Date().toISOString(),
+        unread_count: (selectedConversation.unread_count || 0) + 1
       }).eq("id", selectedConversation.id);
+      fetchConversations();
     }
   };
 
@@ -138,7 +197,16 @@ export default function Messages() {
               {displayConversations.map((conv) => (
                 <button
                   key={conv.id}
-                  onClick={() => setSelectedConversation(conv)}
+                  onClick={async () => {
+                    setSelectedConversation(conv);
+                    // mark conversation messages as read for current user
+                    if (conv.id && currentUserId) {
+                      await supabase.from('messages').update({ is_read: true }).eq('conversation_id', conv.id).eq('receiver_id', currentUserId);
+                      await supabase.from('conversations').update({ unread_count: 0 }).eq('id', conv.id);
+                      fetchConversations();
+                      fetchMessages(conv.id);
+                    }
+                  }}
                   className={cn(
                     "w-full p-4 flex items-start gap-3 hover:bg-muted/50 transition-colors border-b border-border",
                     selectedConversation?.id === conv.id && "bg-muted/50"
@@ -162,7 +230,7 @@ export default function Messages() {
                       {conv.last_message || "No messages yet"}
                     </p>
                   </div>
-                  {conv.unread_count > 0 && (
+                  {conv.unread_count && conv.unread_count > 0 && (
                     <span className="h-5 min-w-5 px-1.5 rounded-full bg-primary text-primary-foreground text-xs flex items-center justify-center">
                       {conv.unread_count}
                     </span>
@@ -214,25 +282,28 @@ export default function Messages() {
                       </p>
                     </div>
                   ) : (
-                    messages.map((msg) => (
-                      <div
-                        key={msg.id}
-                        className={cn(
-                          "max-w-[70%] p-3 rounded-lg",
-                          msg.direction === "outbound"
-                            ? "ml-auto bg-primary text-primary-foreground rounded-br-none"
-                            : "bg-muted rounded-bl-none"
-                        )}
-                      >
-                        <p>{msg.content}</p>
-                        <span className={cn(
-                          "text-xs mt-1 block",
-                          msg.direction === "outbound" ? "text-primary-foreground/70" : "text-muted-foreground"
-                        )}>
-                          {formatTime(msg.created_at)}
-                        </span>
-                      </div>
-                    ))
+                    messages.map((msg) => {
+                      const isOutbound = msg.sender_id === currentUserId;
+                      return (
+                        <div
+                          key={msg.id}
+                          className={cn(
+                            "max-w-[70%] p-3 rounded-lg",
+                            isOutbound
+                              ? "ml-auto bg-primary text-primary-foreground rounded-br-none"
+                              : "bg-muted rounded-bl-none"
+                          )}
+                        >
+                          <p>{msg.content}</p>
+                          <span className={cn(
+                            "text-xs mt-1 block",
+                            isOutbound ? "text-primary-foreground/70" : "text-muted-foreground"
+                          )}>
+                            {formatTime(msg.created_at)}
+                          </span>
+                        </div>
+                      );
+                    })
                   )}
                 </div>
 
@@ -263,9 +334,9 @@ export default function Messages() {
                 <div className="p-4 rounded-full bg-primary/10 mb-6">
                   <img src="/logo.png" alt="ShopAfrica" className="h-16 w-16 object-contain" />
                 </div>
-                <h2 className="text-2xl font-bold mb-2">WhatsApp Messages</h2>
+                <h2 className="text-2xl font-bold mb-2">Messages</h2>
                 <p className="text-muted-foreground max-w-md">
-                  Select a conversation to view messages or wait for customers to reach out via WhatsApp.
+                  Select a conversation to view messages or wait for customers to reach out.
                 </p>
               </div>
             )}

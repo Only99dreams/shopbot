@@ -29,6 +29,7 @@ import Shop from "./pages/Shop";
 import ProductDetail from "./pages/ProductDetail";
 import Checkout from "./pages/Checkout";
 import Marketplace from "./pages/Marketplace";
+import Redeem from "./pages/Redeem";
 // Admin pages
 import Sellers from "./pages/admin/Sellers";
 import Shops from "./pages/admin/Shops";
@@ -41,6 +42,9 @@ import AdminAnalytics from "./pages/admin/AdminAnalytics";
 import AdminPayments from "./pages/admin/AdminPayments";
 import AdminOrders from "./pages/admin/AdminOrders";
 import AdminSellersManagement from "./pages/admin/AdminSellersManagement";
+import { supabase } from '@/integrations/supabase/client';
+import { useToast } from '@/hooks/use-toast';
+import ErrorBoundary from './components/ErrorBoundary';
 
 const queryClient = new QueryClient();
 
@@ -69,57 +73,93 @@ const App = () => {
   };
 
   return (
-    <QueryClientProvider client={queryClient}>
-      <ThemeProvider defaultTheme="dark" storageKey="shopnaija-theme">
-        <TooltipProvider>
-          <Toaster />
-          <Sonner />
-          <BrowserRouter>
-            <AuthProvider>
-              <StandaloneHandler />
-              <Preloader visible={loading} />
-              <PWAInstallManager />
-              <Routes>
-              <Route path="/" element={<Index />} />
-              <Route path="/marketplace" element={<Marketplace />} />
-              <Route path="/auth" element={<Auth />} />
-              <Route path="/reset-password" element={<ResetPassword />} />
-              {/* Public storefront routes */}
-              <Route path="/shop/:shopId" element={<Shop />} />
-              <Route path="/shop/:shopId/product/:productId" element={<ProductDetail />} />
-              <Route path="/shop/:shopId/checkout" element={<Checkout />} />
-              {/* Seller dashboard routes */}
-              <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
-              <Route path="/dashboard/products" element={<ProtectedRoute><Products /></ProtectedRoute>} />
-              <Route path="/dashboard/categories" element={<ProtectedRoute><Categories /></ProtectedRoute>} />
-              <Route path="/dashboard/orders" element={<ProtectedRoute><Orders /></ProtectedRoute>} />
-              <Route path="/dashboard/customers" element={<ProtectedRoute><Customers /></ProtectedRoute>} />
-              <Route path="/dashboard/analytics" element={<ProtectedRoute><Analytics /></ProtectedRoute>} />
-              <Route path="/dashboard/messages" element={<ProtectedRoute><Messages /></ProtectedRoute>} />
-              <Route path="/dashboard/referrals" element={<ProtectedRoute><Referrals /></ProtectedRoute>} />
-              <Route path="/dashboard/subscription" element={<ProtectedRoute><Subscription /></ProtectedRoute>} />
-              <Route path="/dashboard/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
-              {/* Admin routes */}
-              <Route path="/admin" element={<ProtectedRoute requireAdmin><AdminDashboard /></ProtectedRoute>} />
-              <Route path="/admin/sellers" element={<ProtectedRoute requireAdmin><Sellers /></ProtectedRoute>} />
-              <Route path="/admin/sellers-management" element={<ProtectedRoute requireAdmin><AdminSellersManagement /></ProtectedRoute>} />
-              <Route path="/admin/shops" element={<ProtectedRoute requireAdmin><Shops /></ProtectedRoute>} />
-              <Route path="/admin/products" element={<ProtectedRoute requireAdmin><AdminProducts /></ProtectedRoute>} />
-              <Route path="/admin/orders" element={<ProtectedRoute requireAdmin><AdminOrders /></ProtectedRoute>} />
-              <Route path="/admin/payments" element={<ProtectedRoute requireAdmin><AdminPayments /></ProtectedRoute>} />
-              <Route path="/admin/transactions" element={<ProtectedRoute requireAdmin><Transactions /></ProtectedRoute>} />
-              <Route path="/admin/subscriptions" element={<ProtectedRoute requireAdmin><AdminSubscriptions /></ProtectedRoute>} />
-              <Route path="/admin/referrals" element={<ProtectedRoute requireAdmin><AdminReferrals /></ProtectedRoute>} />
-              <Route path="/admin/analytics" element={<ProtectedRoute requireAdmin><AdminAnalytics /></ProtectedRoute>} />
-              <Route path="/admin/settings" element={<ProtectedRoute requireAdmin><AdminSettings /></ProtectedRoute>} />
-              <Route path="*" element={<NotFound />} />
-            </Routes>
-          </AuthProvider>
-        </BrowserRouter>
-      </TooltipProvider>
-    </ThemeProvider>
-  </QueryClientProvider>
+    <ErrorBoundary>
+      <QueryClientProvider client={queryClient}>
+        <ThemeProvider defaultTheme="dark" storageKey="shopnaija-theme">
+          <TooltipProvider>
+            <Toaster />
+            <Sonner />
+            <MessageToastListener />
+            <BrowserRouter>
+              <AuthProvider>
+                <StandaloneHandler />
+                <Preloader visible={loading} />
+                <PWAInstallManager />
+                <Routes>
+                <Route path="/" element={<Index />} />
+                <Route path="/marketplace" element={<Marketplace />} />
+                <Route path="/auth" element={<Auth />} />
+                <Route path="/reset-password" element={<ResetPassword />} />
+                <Route path="/redeem" element={<Redeem />} />
+                {/* Public storefront routes */}
+                <Route path="/shop/:shopId" element={<Shop />} />
+                <Route path="/shop/:shopId/product/:productId" element={<ProductDetail />} />
+                <Route path="/shop/:shopId/checkout" element={<Checkout />} />
+                {/* Seller dashboard routes */}
+                <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+                <Route path="/dashboard/products" element={<ProtectedRoute><Products /></ProtectedRoute>} />
+                <Route path="/dashboard/categories" element={<ProtectedRoute><Categories /></ProtectedRoute>} />
+                <Route path="/dashboard/orders" element={<ProtectedRoute><Orders /></ProtectedRoute>} />
+                <Route path="/dashboard/customers" element={<ProtectedRoute><Customers /></ProtectedRoute>} />
+                <Route path="/dashboard/analytics" element={<ProtectedRoute><Analytics /></ProtectedRoute>} />
+                <Route path="/dashboard/messages" element={<ProtectedRoute><Messages /></ProtectedRoute>} />
+                <Route path="/dashboard/referrals" element={<ProtectedRoute><Referrals /></ProtectedRoute>} />
+                <Route path="/dashboard/subscription" element={<ProtectedRoute><Subscription /></ProtectedRoute>} />
+                <Route path="/dashboard/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
+                {/* Admin routes */}
+                <Route path="/admin" element={<ProtectedRoute requireAdmin><AdminDashboard /></ProtectedRoute>} />
+                <Route path="/admin/sellers" element={<ProtectedRoute requireAdmin><Sellers /></ProtectedRoute>} />
+                <Route path="/admin/sellers-management" element={<ProtectedRoute requireAdmin><AdminSellersManagement /></ProtectedRoute>} />
+                <Route path="/admin/shops" element={<ProtectedRoute requireAdmin><Shops /></ProtectedRoute>} />
+                <Route path="/admin/products" element={<ProtectedRoute requireAdmin><AdminProducts /></ProtectedRoute>} />
+                <Route path="/admin/orders" element={<ProtectedRoute requireAdmin><AdminOrders /></ProtectedRoute>} />
+                <Route path="/admin/payments" element={<ProtectedRoute requireAdmin><AdminPayments /></ProtectedRoute>} />
+                <Route path="/admin/transactions" element={<ProtectedRoute requireAdmin><Transactions /></ProtectedRoute>} />
+                <Route path="/admin/subscriptions" element={<ProtectedRoute requireAdmin><AdminSubscriptions /></ProtectedRoute>} />
+                <Route path="/admin/referrals" element={<ProtectedRoute requireAdmin><AdminReferrals /></ProtectedRoute>} />
+                <Route path="/admin/analytics" element={<ProtectedRoute requireAdmin><AdminAnalytics /></ProtectedRoute>} />
+                <Route path="/admin/settings" element={<ProtectedRoute requireAdmin><AdminSettings /></ProtectedRoute>} />
+                <Route path="*" element={<NotFound />} />
+              </Routes>
+            </AuthProvider>
+          </BrowserRouter>
+        </TooltipProvider>
+      </ThemeProvider>
+    </QueryClientProvider>
+    </ErrorBoundary>
   );
 };
 
 export default App;
+
+function MessageToastListener() {
+  const { toast } = useToast();
+
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      const { data: userData } = await supabase.auth.getUser();
+      const userId = userData?.data?.user?.id;
+      if (!userId) return;
+
+      const channel = supabase.channel('public:messages:toasts').on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'messages' },
+        (payload) => {
+          const msg = payload.new as any;
+          if (!mounted) return;
+          if (msg.receiver_id === userId) {
+            toast({ title: 'New message', description: msg.content || 'You have a new message' });
+          }
+        }
+      ).subscribe();
+
+      return () => {
+        mounted = false;
+        channel.unsubscribe();
+      };
+    })();
+  }, [toast]);
+
+  return null;
+}

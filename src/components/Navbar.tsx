@@ -4,6 +4,7 @@ import { ThemeToggle } from "@/components/ThemeToggle";
 import { Menu, X, Shield, Store } from "lucide-react";
 import { useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
+import { useMessageNotifications } from '@/hooks/useMessageNotifications';
 
 const navLinks: { label: string; href: string; isRoute?: boolean }[] = [
   { label: "Marketplace", href: "/marketplace", isRoute: true },
@@ -15,6 +16,7 @@ const navLinks: { label: string; href: string; isRoute?: boolean }[] = [
 export function Navbar() {
   const [isOpen, setIsOpen] = useState(false);
   const { user, isAdmin } = useAuth();
+  const { count } = useMessageNotifications();
 
   return (
     <header className="fixed top-0 left-0 right-0 z-50 bg-background/80 backdrop-blur-md border-b border-border">
@@ -61,10 +63,15 @@ export function Navbar() {
                     </Button>
                   </Link>
                 )}
-                <Link to="/dashboard">
+                <Link to="/dashboard" className="relative">
                   <Button size="sm" className="bg-primary hover:bg-primary/90 text-primary-foreground">
                     Dashboard
                   </Button>
+                  {count > 0 && (
+                    <span className="absolute -top-1 -right-2 inline-flex items-center justify-center h-4 min-w-4 px-1 rounded-full text-xs bg-red-500 text-white">
+                      {count}
+                    </span>
+                  )}
                 </Link>
               </>
             ) : (

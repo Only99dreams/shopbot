@@ -457,14 +457,18 @@ export default function Auth() {
               <div className="h-32 w-32 mx-auto mb-8 rounded-full bg-primary-foreground/20 flex items-center justify-center p-4">
                 <img src="/logo.png" alt="ShopAfrica" className="h-full w-full object-contain" />
               </div>
-              <h2 className="text-3xl font-bold mb-4">Sell Smarter on WhatsApp</h2>
+              <h2 className="text-3xl font-bold mb-4">
+                "Sell Smarter on WhatsApp"
+              </h2>
               <p className="text-primary-foreground/80 text-lg">
                 Access your dashboard to manage products, track orders, and grow your business with AI-powered insights.
               </p>
             </div>
           ) : (
             <>
-              <h2 className="text-4xl font-bold mb-6">Start Selling on WhatsApp Today</h2>
+              <h2 className="text-4xl font-bold mb-6">
+                Start Selling on WhatsApp Today
+              </h2>
               <p className="text-primary-foreground/80 text-lg mb-8">
                 Join 10,000+ sellers who are growing their business with WhatsApp Shop.
               </p>

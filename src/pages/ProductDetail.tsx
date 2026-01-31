@@ -48,6 +48,23 @@ function ProductDetailContent() {
     enabled: !!shopId
   });
 
+  // Fetch seller rating
+  const { data: sellerRating } = useQuery({
+    queryKey: ['seller-rating', shop?.owner_id],
+    queryFn: async () => {
+      if (!shop?.owner_id) return null;
+      const { data } = await supabase
+        .from('seller_ratings')
+        .select('rating')
+        .eq('seller_id', shop.owner_id);
+      if (!data) return null;
+      const count = data.length;
+      const avg = count > 0 ? data.reduce((s, r) => s + Number(r.rating), 0) / count : null;
+      return { avg, count };
+    },
+    enabled: !!shop?.owner_id
+  });
+
   // Fetch subscription to check if shop owner has active subscription
   const { data: subscription } = useQuery({
     queryKey: ['shop-subscription', shopId],
@@ -407,17 +424,61 @@ function ProductDetailContent() {
               </Button>
             )}
 
-            {/* WhatsApp Order */}
+            {/* Message Seller */}
             <Button
               size="lg"
               variant="outline"
-              className="w-full rounded-full h-12 text-base font-semibold bg-green-50 dark:bg-green-950/30 border-green-500 text-green-600 hover:bg-green-100 dark:hover:bg-green-950/50"
-              onClick={handleWhatsAppOrder}
+              className="w-full rounded-full h-12 text-base font-semibold"
+              onClick={async () => {
+                if (!shop || !product) return;
+                const { data: userData } = await supabase.auth.getUser();
+                const buyerId = userData?.data?.user?.id;
+                if (!buyerId) {
+                  toast.error('You must have a seller account to message sellers. Please sign up as a seller first.');
+                  navigate('/auth');
+                  return;
+                }
+
+                // find existing conversation
+                const { data: existing } = await supabase
+                  .from('conversations')
+                  .select('*')
+                  .eq('shop_id', shop.id)
+                  .eq('buyer_id', buyerId)
+                  .maybeSingle();
+
+                let convId = existing?.id;
+                if (!convId) {
+                  const { data: inserted, error } = await supabase
+                    .from('conversations')
+                    .insert({ shop_id: shop.id, buyer_id: buyerId, last_message: null, last_message_at: null })
+                    .select()
+                    .maybeSingle();
+                  if (error) {
+                    toast.error('Failed to start conversation');
+                    return;
+                  }
+                  convId = inserted.id;
+                }
+
+                navigate('/messages', { state: { conversationId: convId } });
+              }}
               disabled={isOutOfStock}
             >
               <MessageCircle className="mr-2 h-5 w-5" />
-              Order via WhatsApp
+              Message Seller
             </Button>
+
+            {/* Rating UI */}
+            <div className="mt-3">
+              <div className="flex items-center gap-2">
+                <Star className="w-4 h-4 fill-yellow-400 text-yellow-400" />
+                <span>{sellerRating?.avg ? Number(sellerRating.avg).toFixed(1) : '—'}</span>
+                <span className="text-muted-foreground/50">|</span>
+                <span className="text-sm text-muted-foreground">{sellerRating?.count || 0} ratings</span>
+              </div>
+              <RatingForm shop={shop} />
+            </div>
 
             {/* Trust Badges */}
             <div className="grid grid-cols-3 gap-4 pt-4 border-t">
@@ -461,5 +522,47 @@ export default function ProductDetail() {
     <CartProvider>
       <ProductDetailContent />
     </CartProvider>
+  );
+}
+
+// RatingForm component
+function RatingForm({ shop }: { shop: any }) {
+  const [rating, setRating] = useState(5);
+  const [review, setReview] = useState('');
+
+  const submitRating = async () => {
+    const { data: userData } = await supabase.auth.getUser();
+    const buyerId = userData?.data?.user?.id;
+    if (!shop?.owner_id) return toast.error('Invalid seller');
+
+    const { error } = await supabase.from('seller_ratings').insert({
+      seller_id: shop.owner_id,
+      buyer_id: buyerId || null, // Allow anonymous ratings
+      rating,
+      review,
+    });
+
+    if (error) {
+      toast.error('Failed to submit rating');
+    } else {
+      toast.success('Rating submitted');
+      setReview('');
+    }
+  };
+
+  return (
+    <div className="mt-3 space-y-2">
+      <div className="flex items-center gap-2">
+        {[1,2,3,4,5].map((s) => (
+          <button key={s} onClick={() => setRating(s)} className={cn('p-1', rating >= s ? 'text-yellow-400' : 'text-muted-foreground')}>
+            <Star className="w-5 h-5" />
+          </button>
+        ))}
+      </div>
+      <textarea value={review} onChange={(e) => setReview(e.target.value)} className="w-full p-2 border rounded-md" placeholder="Write a short review (optional)" />
+      <div>
+        <Button onClick={submitRating} size="sm">Submit Rating</Button>
+      </div>
+    </div>
   );
 }
