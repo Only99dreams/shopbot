@@ -5,7 +5,7 @@ import {
   BarChart3, 
   Users,
   ShieldCheck,
-  MessageCircle,
+  Store,
   MapPin,
   Clock,
   Smartphone,
@@ -16,9 +16,9 @@ import { Badge } from "@/components/ui/badge";
 
 const features = [
   {
-    icon: MessageCircle,
-    title: "Sell on WhatsApp",
-    description: "Your customers order directly through WhatsApp — the app they already use every day. No need to download anything new!",
+    icon: Store,
+    title: "Your Online Store",
+    description: "Get a professional online store where customers can browse and order directly. No technical skills required!",
     color: "bg-green-500/10 text-green-600",
   },
   {

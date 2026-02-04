@@ -9,8 +9,8 @@ createRoot(document.getElementById("root")!).render(
   </HelmetProvider>
 );
 
-// Register service worker if available
-if ('serviceWorker' in navigator) {
+// Register service worker if available and in production
+if (import.meta.env.PROD && 'serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('/sw.js').then(reg => {
       console.log('Service worker registered.', reg);

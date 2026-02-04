@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { MessageCircle, Instagram, Twitter, Facebook, Mail, Phone } from "lucide-react";
+import { Instagram, Twitter, Facebook, Mail } from "lucide-react";
 
 const footerLinks = {
   product: [
@@ -23,7 +23,6 @@ const footerLinks = {
 };
 
 const socialLinks = [
-  { icon: MessageCircle, href: "https://wa.me/2348000000000", label: "WhatsApp" },
   { icon: Instagram, href: "#", label: "Instagram" },
   { icon: Twitter, href: "#", label: "Twitter" },
   { icon: Facebook, href: "#", label: "Facebook" },
@@ -42,7 +41,7 @@ export function Footer() {
               <span className="text-lg font-bold text-foreground">shop<span className="text-primary">Africa</span></span>
             </div>
             <p className="text-sm text-muted-foreground mb-4">
-              Empowering African sellers to build thriving online businesses through WhatsApp. Compare prices and shop local!
+              Empowering African sellers to build thriving online businesses. Compare prices and shop local!
             </p>
             <div className="flex gap-3">
               {socialLinks.map((social) => (
@@ -112,15 +111,6 @@ export function Footer() {
           <div>
             <h4 className="font-semibold text-foreground mb-4">Contact Us</h4>
             <ul className="space-y-3">
-              <li>
-                <a 
-                  href="https://wa.me/2348000000000" 
-                  className="text-sm text-muted-foreground hover:text-foreground transition-colors flex items-center gap-2"
-                >
-                  <MessageCircle className="h-4 w-4 text-green-500" />
-                  WhatsApp Support
-                </a>
-              </li>
               <li>
                 <a 
                   href="mailto:hello@shopafrica.com" 

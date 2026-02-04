@@ -35,6 +35,7 @@ export default function Referrals() {
   const [referralCode, setReferralCode] = useState<ReferralCode | null>(null);
   const [referrals, setReferrals] = useState<Referral[]>([]);
   const [copied, setCopied] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
     if (user?.id) {
@@ -42,41 +43,87 @@ export default function Referrals() {
     }
   }, [user?.id]);
 
-  const fetchReferralData = async () => {
-    if (!user?.id) return;
+  const generateReferralCode = (): string => {
+    const seed = `${user?.id ?? ''}${Date.now()}${Math.random()}`;
+    return btoa(seed)
+      .replace(/[^a-zA-Z0-9]/g, '')
+      .toUpperCase()
+      .slice(0, 8);
+  };
 
-    // Fetch referral code
-    const { data: codeData } = await supabase
+  const ensureReferralCode = async (): Promise<ReferralCode | null> => {
+    if (!user?.id) return null;
+
+    const { data: codeData, error: codeError } = await supabase
       .from("referral_codes")
       .select("*")
       .eq("user_id", user.id)
       .maybeSingle();
 
-    if (codeData) setReferralCode(codeData);
+    if (codeError) throw codeError;
+    if (codeData) return codeData as ReferralCode;
 
-    // Fetch referrals
-    const { data: referralData } = await supabase
-      .from("referrals")
-      .select("*")
-      .eq("referrer_id", user.id)
-      .order("created_at", { ascending: false });
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const code = generateReferralCode();
+      const { data: createdCode, error: createError } = await supabase
+        .from("referral_codes")
+        .insert({ user_id: user.id, code })
+        .select("*")
+        .single();
 
-    if (referralData && referralData.length > 0) {
-      // Fetch profiles for referred users
-      const referredIds = referralData.map(r => r.referred_id);
-      const { data: profilesData } = await supabase
-        .from("profiles")
-        .select("id, full_name, email")
-        .in("id", referredIds);
+      if (!createError && createdCode) return createdCode as ReferralCode;
 
-      // Map profiles to referrals
-      const referralsWithProfiles = referralData.map(r => ({
-        ...r,
-        referred_profile: profilesData?.find(p => p.id === r.referred_id) || null
-      }));
-      setReferrals(referralsWithProfiles as Referral[]);
-    } else {
-      setReferrals([]);
+      const message = String(createError?.message || '').toLowerCase();
+      if (!message.includes('duplicate') && !message.includes('unique')) {
+        throw createError;
+      }
+    }
+
+    throw new Error('Unable to generate referral code');
+  };
+
+  const fetchReferralData = async () => {
+    if (!user?.id) return;
+    setIsLoading(true);
+
+    try {
+      const codeData = await ensureReferralCode();
+      if (codeData) setReferralCode(codeData);
+
+      const { data: referralData, error: referralError } = await supabase
+        .from("referrals")
+        .select("*")
+        .eq("referrer_id", user.id)
+        .order("created_at", { ascending: false });
+
+      if (referralError) throw referralError;
+
+      if (referralData && referralData.length > 0) {
+        const referredIds = referralData.map(r => r.referred_id);
+        const { data: profilesData, error: profilesError } = await supabase
+          .from("profiles")
+          .select("id, full_name, email")
+          .in("id", referredIds);
+
+        if (profilesError) throw profilesError;
+
+        const referralsWithProfiles = referralData.map(r => ({
+          ...r,
+          referred_profile: profilesData?.find(p => p.id === r.referred_id) || null
+        }));
+        setReferrals(referralsWithProfiles as Referral[]);
+      } else {
+        setReferrals([]);
+      }
+    } catch (error) {
+      console.error('Referral fetch error:', error);
+      toast({
+        title: 'Unable to load referrals',
+        description: 'Please refresh the page and try again.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -100,7 +147,7 @@ export default function Referrals() {
       try {
         await navigator.share({
           title: "Join ShopAfrica",
-          text: "Start selling on WhatsApp with ShopAfrica! Use my referral link to get started:",
+          text: "Start selling online with ShopAfrica! Use my referral link to get started:",
           url: referralLink,
         });
       } catch (err) {
@@ -201,11 +248,12 @@ export default function Referrals() {
                   size="icon" 
                   className="absolute right-1 top-1/2 -translate-y-1/2"
                   onClick={copyToClipboard}
+                  disabled={!referralCode || isLoading}
                 >
                   {copied ? <Check className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}
                 </Button>
               </div>
-              <Button onClick={shareReferral} className="gap-2">
+              <Button onClick={shareReferral} className="gap-2" disabled={!referralCode || isLoading}>
                 <Share2 className="h-4 w-4" />
                 Share Link
               </Button>
@@ -227,7 +275,7 @@ export default function Referrals() {
           <CardContent>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               {[
-                { step: 1, title: "Share Your Link", description: "Send your unique referral link to friends who might be interested in selling on WhatsApp" },
+                { step: 1, title: "Share Your Link", description: "Send your unique referral link to friends who might be interested in selling online" },
                 { step: 2, title: "They Sign Up & Pay", description: "When they create an account using your link and pay ₦1,000 for their subscription" },
                 { step: 3, title: "Earn ₦200", description: "Get ₦200 for each successful referral. Rewards are added to your account automatically" },
               ].map((item) => (

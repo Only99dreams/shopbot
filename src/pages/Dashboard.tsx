@@ -205,7 +205,7 @@ export default function Dashboard() {
           <div className="bg-card rounded-xl p-4 sm:p-6 border border-border">
             <h3 className="font-semibold mb-2 text-sm sm:text-base">Share Your Shop</h3>
             <p className="text-xs sm:text-sm text-muted-foreground mb-3 sm:mb-4">
-              Share your shop link on WhatsApp to start selling.
+              Share your shop link on social media to start selling.
             </p>
             <Button size="sm" variant="outline" onClick={() => setShareModalOpen(true)} className="w-full sm:w-auto">
               Share Link

@@ -7,7 +7,7 @@ import { CartDrawer } from '@/components/storefront/CartDrawer';
 import { CartProvider } from '@/hooks/useCart';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Search, MessageCircle, SlidersHorizontal, Grid3X3, LayoutGrid, Package, Sparkles, ShoppingCart, CheckCircle, Clock, Loader2, Star } from 'lucide-react';
+import { Search, SlidersHorizontal, Grid3X3, LayoutGrid, Package, Sparkles, ShoppingCart, CheckCircle, Clock, Loader2, Star } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -118,6 +118,32 @@ function ShopContent() {
     },
     enabled: !!shopId
   });
+
+  const { data: shopMetrics } = useQuery({
+    queryKey: ['shop-metrics', shopId],
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc('get_shop_metrics', {
+        p_shop_id: shopId!,
+      });
+      if (error) throw error;
+      return data as unknown as {
+        avg_rating: number | null;
+        rating_count: number | null;
+        avg_response_minutes: number | null;
+      };
+    },
+    enabled: !!shopId
+  });
+
+  const handleMessageSeller = async () => {
+    if (!shopId) return;
+    if (!user) {
+      toast.error('Please sign in to message the seller.');
+      navigate(`/auth?mode=login`);
+      return;
+    }
+    navigate(`/shop/${shopId}/chat`);
+  };
 
   const { data: categories } = useQuery({
     queryKey: ['shop-categories', shopId],
@@ -241,8 +267,8 @@ function ShopContent() {
     );
   }
 
-  // Check if subscription is active
-  const isSubscriptionActive = subscription?.status === 'active';
+  // Check if subscription is active (includes trial)
+  const isSubscriptionActive = subscription?.status === 'active' || subscription?.status === 'trial';
 
   if (!isSubscriptionActive) {
     return (
@@ -253,9 +279,9 @@ function ShopContent() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
             </svg>
           </div>
-          <h1 className="text-2xl font-bold mb-2">Shop Currently Unavailable</h1>
+          <h1 className="text-2xl font-bold mb-2">Subscription Required</h1>
           <p className="text-muted-foreground mb-6">
-            This shop is temporarily closed. Please check back later or contact the shop owner.
+            This shop is currently inactive. The seller needs to subscribe to activate the shop.
           </p>
           <Link to="/">
             <Button>Go Home</Button>
@@ -270,6 +296,14 @@ function ShopContent() {
   const ogImage = shop.logo_url || '/og-default.jpg';
 
   const productCount = products?.length || 0;
+  const avgRating = shopMetrics?.avg_rating ?? null;
+  const ratingCount = shopMetrics?.rating_count ?? 0;
+  const responseMinutes = shopMetrics?.avg_response_minutes ?? null;
+  const responseTimeLabel = responseMinutes
+    ? responseMinutes < 60
+      ? `Usually responds in ${Math.round(responseMinutes)} min`
+      : `Usually responds in ${Math.round(responseMinutes / 60)} hr`
+    : 'Response time unavailable';
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-muted/30 to-background">
@@ -288,6 +322,10 @@ function ShopContent() {
         totalProducts={productCount}
         state={shop.state}
         city={shop.city}
+        rating={avgRating ?? undefined}
+        ratingCount={ratingCount}
+        responseTime={responseTimeLabel}
+        onMessageSeller={handleMessageSeller}
       />
 
       {/* Sticky Search and Cart Bar */}
@@ -601,9 +639,6 @@ function ShopContent() {
         </div>
       </main>
 
-      {/* Floating Message Button (opens/creates conversation) */}
-      <FloatingMessageButton shop={shop} />
-
       {/* Footer */}
       <footer className="bg-muted/50 border-t py-12 mt-12">
         <div className="container mx-auto px-4">
@@ -685,55 +720,5 @@ export default function Shop() {
     <CartProvider>
       <ShopContent />
     </CartProvider>
-  );
-}
-
-function FloatingMessageButton({ shop }: { shop: any }) {
-  const navigate = useNavigate();
-
-  if (!shop) return null;
-
-  const openConversation = async () => {
-    const { data: userData } = await supabase.auth.getUser();
-    const buyerId = userData?.data?.user?.id;
-    if (!buyerId) {
-      toast.error('You must have a seller account to message sellers. Please sign up as a seller first.');
-      navigate('/auth');
-      return;
-    }
-
-    // find existing conversation
-    const { data: existing } = await supabase
-      .from('conversations')
-      .select('*')
-      .eq('shop_id', shop.id)
-      .eq('buyer_id', buyerId)
-      .maybeSingle();
-
-    let convId = existing?.id;
-    if (!convId) {
-      const { data: inserted, error } = await supabase
-        .from('conversations')
-        .insert({ shop_id: shop.id, buyer_id: buyerId, last_message: null, last_message_at: null })
-        .select()
-        .maybeSingle();
-      if (error) {
-        toast.error('Failed to start conversation');
-        return;
-      }
-      convId = inserted.id;
-    }
-
-    navigate('/messages', { state: { conversationId: convId } });
-  };
-
-  return (
-    <button
-      onClick={openConversation}
-      className="fixed bottom-6 right-6 bg-primary hover:bg-primary/90 text-white p-4 rounded-full shadow-xl z-50"
-      aria-label="Message seller"
-    >
-      <MessageCircle className="h-6 w-6" />
-    </button>
   );
 }

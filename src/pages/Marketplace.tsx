@@ -88,6 +88,28 @@ interface Product {
   };
 }
 
+interface OrderItem {
+  product_name: string;
+  quantity: number;
+  unit_price: number;
+  total_price: number;
+}
+
+interface TrackedOrder {
+  id: string;
+  order_number: string;
+  total: number;
+  status: string;
+  created_at: string;
+  redemption_confirmed?: boolean;
+  shops?: {
+    id: string;
+    name: string;
+    logo_url: string | null;
+  };
+  order_items: OrderItem[];
+}
+
 export default function Marketplace() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedState, setSelectedState] = useState('All States');
@@ -97,7 +119,7 @@ export default function Marketplace() {
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [activeTab, setActiveTab] = useState<'products' | 'shops' | 'orders'>('products');
   const [orderNumber, setOrderNumber] = useState('');
-  const [trackedOrder, setTrackedOrder] = useState<any>(null);
+  const [trackedOrder, setTrackedOrder] = useState<TrackedOrder | null>(null);
   const { user } = useAuth();
 
   // Reset city when state changes
@@ -106,18 +128,18 @@ export default function Marketplace() {
   }, [selectedState]);
 
   // Fetch all active shops with their subscriptions
-  const { data: shops, isLoading: shopsLoading } = useQuery({
+  const { data: shops, isLoading: shopsLoading, refetch: refetchShops } = useQuery({
     queryKey: ['marketplace-shops', selectedState, selectedCity],
     queryFn: async () => {
+      // First get all shops with their subscription status
       let query = supabase
         .from('shops')
         .select(`
           *,
-          subscriptions!inner(status),
+          subscriptions(status),
           products(count)
         `)
-        .eq('is_active', true)
-        .eq('subscriptions.status', 'active');
+        .eq('is_active', true);
 
       // Apply state filter if a specific state is selected
       if (selectedState && selectedState !== 'All States') {
@@ -131,53 +153,91 @@ export default function Marketplace() {
 
       const { data, error } = await query;
 
-      if (error) throw error;
+      if (error) {
+        console.error('Error fetching shops:', error);
+        throw error;
+      }
       
-      return (data || []).map(shop => ({
+      // Filter shops that are active and have active or trial subscription
+      const filteredShops = (data || []).filter(shop => {
+        const isActive = shop.is_active !== false;
+        const subscription = Array.isArray(shop.subscriptions)
+          ? shop.subscriptions[0]
+          : shop.subscriptions;
+        const status = subscription?.status;
+        const hasValidSubscription = !subscription || status === 'active' || status === 'trial';
+
+        return isActive && hasValidSubscription;
+      });
+      
+      return filteredShops.map(shop => ({
         ...shop,
-        product_count: shop.products?.[0]?.count || 0
+        product_count: Array.isArray(shop.products) ? shop.products[0]?.count || 0 : 0
       })) as Shop[];
-    }
+    },
+    staleTime: 0,
+    refetchOnMount: true,
   });
 
   // Fetch all products from active shops
-  const { data: products, isLoading: productsLoading } = useQuery({
+  const { data: products, isLoading: productsLoading, refetch: refetchProducts } = useQuery({
     queryKey: ['marketplace-products', selectedState, selectedCity],
     queryFn: async () => {
-      let query = supabase
+      // Fetch products with shop and subscription info
+      const { data, error } = await supabase
         .from('products')
         .select(`
           *,
-          shops!inner(
+          shops(
             id,
             name,
             logo_url,
             state,
             city,
             is_active,
-            subscriptions!inner(status)
+            subscriptions(status)
           )
         `)
         .eq('is_available', true)
-        .eq('shops.is_active', true)
-        .eq('shops.subscriptions.status', 'active')
         .order('created_at', { ascending: false });
 
-      // Apply state filter if a specific state is selected
-      if (selectedState && selectedState !== 'All States') {
-        query = query.eq('shops.state', selectedState);
+      if (error) {
+        console.error('Error fetching products:', error);
+        throw error;
       }
+      
+      // Filter products from active shops with valid subscriptions
+      const filteredProducts = (data || []).filter(product => {
+        const shop = product.shops;
+        if (!shop || shop.is_active === false) {
+          return false;
+        }
 
-      // Apply city/area filter if a specific city is selected
-      if (selectedCity && selectedCity !== 'All Areas') {
-        query = query.ilike('shops.city', `%${selectedCity}%`);
-      }
+        const subscription = Array.isArray(shop.subscriptions)
+          ? shop.subscriptions[0]
+          : shop.subscriptions;
+        const status = subscription?.status;
+        const hasValidSubscription = !subscription || status === 'active' || status === 'trial';
 
-      const { data, error } = await query;
-
-      if (error) throw error;
-      return data as Product[];
-    }
+        if (!hasValidSubscription) {
+          return false;
+        }
+        
+        // Apply location filters
+        if (selectedState && selectedState !== 'All States' && shop.state !== selectedState) {
+          return false;
+        }
+        if (selectedCity && selectedCity !== 'All Areas' && !shop.city?.toLowerCase().includes(selectedCity.toLowerCase())) {
+          return false;
+        }
+        
+        return true;
+      });
+      
+      return filteredProducts as Product[];
+    },
+    staleTime: 0,
+    refetchOnMount: true,
   });
 
   // Confirm receipt mutation
@@ -195,7 +255,7 @@ export default function Marketplace() {
       // Update the tracked order to reflect confirmation
       setTrackedOrder(prev => prev ? { ...prev, redemption_confirmed: true } : null);
     },
-    onError: (error: any) => {
+    onError: (error: Error) => {
       console.error('Confirm receipt error:', error);
       toast.error(error.message || 'Failed to confirm receipt');
     },
@@ -204,33 +264,19 @@ export default function Marketplace() {
   // Track order by order number
   const trackOrderMutation = useMutation({
     mutationFn: async (orderNum: string) => {
-      const { data, error } = await supabase
-        .from('orders')
-        .select(`
-          *,
-          shops (
-            id,
-            name,
-            logo_url
-          ),
-          order_items (
-            product_name,
-            quantity,
-            unit_price,
-            total_price
-          )
-        `)
-        .eq('order_number', orderNum)
-        .eq('payment_status', 'paid')
-        .single();
+      const normalizedOrder = orderNum.trim().toUpperCase();
+      const { data, error } = await supabase.rpc('track_order_by_number', {
+        p_order_number: normalizedOrder,
+      });
 
       if (error) throw error;
-      return data;
+      if (!data) throw new Error('Order not found');
+      return data as unknown as TrackedOrder;
     },
     onSuccess: (data) => {
       setTrackedOrder(data);
     },
-    onError: (error: any) => {
+    onError: (error: Error) => {
       toast.error('Order not found or not eligible for tracking');
       setTrackedOrder(null);
     },
@@ -350,7 +396,7 @@ export default function Marketplace() {
                     placeholder="Search for products like 'tomatoes', 'rice', 'phone'..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    className="pl-12 h-14 rounded-full bg-white text-foreground border-0 shadow-xl text-base"
+                    className="pl-12 h-14 rounded-full bg-white text-black placeholder:text-black/60 border-0 shadow-xl text-base"
                   />
                 </div>
                 <div className="flex flex-col sm:flex-row gap-3">
@@ -496,7 +542,7 @@ export default function Marketplace() {
         {/* Main Content Tabs */}
         <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'products' | 'shops' | 'orders')}>
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
-            <TabsList className={cn("h-12 p-1 bg-muted/50", user ? "grid grid-cols-3" : "")}>
+            <TabsList className={cn("h-12 p-1 bg-muted/50", "grid grid-cols-3")}>
               <TabsTrigger value="products" className="h-10 px-6 rounded-lg data-[state=active]:shadow-sm">
                 <Package className="w-4 h-4 mr-2" />
                 Products
@@ -505,12 +551,10 @@ export default function Marketplace() {
                 <Store className="w-4 h-4 mr-2" />
                 Shops
               </TabsTrigger>
-              {user && (
-                <TabsTrigger value="orders" className="h-10 px-6 rounded-lg data-[state=active]:shadow-sm">
-                  <ShoppingCart className="w-4 h-4 mr-2" />
-                  My Orders
-                </TabsTrigger>
-              )}
+              <TabsTrigger value="orders" className="h-10 px-6 rounded-lg data-[state=active]:shadow-sm">
+                <ShoppingCart className="w-4 h-4 mr-2" />
+                Track Order
+              </TabsTrigger>
             </TabsList>
 
             <div className="flex items-center gap-3">
@@ -700,7 +744,7 @@ export default function Marketplace() {
                     </div>
 
                     <div className="space-y-3 mb-4">
-                      {trackedOrder.order_items.map((item: any, index: number) => (
+                      {trackedOrder.order_items.map((item: OrderItem, index: number) => (
                         <div key={index} className="flex items-center justify-between py-2">
                           <div className="flex items-center gap-3">
                             <Package className="w-4 h-4 text-muted-foreground" />
@@ -923,7 +967,7 @@ function ProductCard({ product, viewMode }: { product: Product; viewMode: 'grid'
                     <Store className="w-3 h-3 m-1 text-muted-foreground" />
                   )}
                 </div>
-                <span className="text-xs font-medium text-foreground truncate">{product.shops?.name}</span>
+                <span className="text-xs font-medium text-black truncate">{product.shops?.name}</span>
               </div>
             </div>
           </div>
@@ -965,7 +1009,7 @@ function ShopCard({ shop }: { shop: Shop }) {
             </div>
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2">
-                <h3 className="font-bold text-lg truncate group-hover:text-primary transition-colors">
+                <h3 className="font-bold text-lg truncate text-white group-hover:text-primary transition-colors">
                   {shop.name}
                 </h3>
                 <Badge variant="secondary" className="text-xs shrink-0">

@@ -30,6 +30,7 @@ import ProductDetail from "./pages/ProductDetail";
 import Checkout from "./pages/Checkout";
 import Marketplace from "./pages/Marketplace";
 import Redeem from "./pages/Redeem";
+import ShopChat from "./pages/ShopChat";
 // Admin pages
 import Sellers from "./pages/admin/Sellers";
 import Shops from "./pages/admin/Shops";
@@ -46,7 +47,17 @@ import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import ErrorBoundary from './components/ErrorBoundary';
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 0, // Data is immediately stale
+      gcTime: 5 * 60 * 1000, // 5 minutes cache time (garbage collection)
+      refetchOnWindowFocus: true,
+      refetchOnReconnect: true,
+      retry: 1,
+    },
+  },
+});
 
 const App = () => {
   const [loading, setLoading] = useState(true);
@@ -95,6 +106,7 @@ const App = () => {
                 <Route path="/shop/:shopId" element={<Shop />} />
                 <Route path="/shop/:shopId/product/:productId" element={<ProductDetail />} />
                 <Route path="/shop/:shopId/checkout" element={<Checkout />} />
+                <Route path="/shop/:shopId/chat" element={<ShopChat />} />
                 {/* Seller dashboard routes */}
                 <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
                 <Route path="/dashboard/products" element={<ProtectedRoute><Products /></ProtectedRoute>} />

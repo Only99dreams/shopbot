@@ -1,4 +1,4 @@
-import { MessageCircle, Clock, Star, Share2, Heart, MapPin } from 'lucide-react';
+import { Clock, Star, Share2, Heart, MapPin, MessageSquare } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useState } from 'react';
@@ -14,6 +14,9 @@ interface ShopHeaderProps {
   totalProducts?: number;
   state?: string | null;
   city?: string | null;
+  onMessageSeller?: () => void;
+  ratingCount?: number;
+  responseTime?: string;
 }
 
 export function ShopHeader({ 
@@ -22,19 +25,15 @@ export function ShopHeader({
   logoUrl, 
   whatsappNumber,
   coverImage,
-  rating = 4.8,
+  rating,
   totalProducts = 0,
   state,
-  city
+  city,
+  onMessageSeller,
+  ratingCount = 0,
+  responseTime = 'Response time unavailable'
 }: ShopHeaderProps) {
   const [isLiked, setIsLiked] = useState(false);
-
-  const handleWhatsAppClick = () => {
-    if (whatsappNumber) {
-      const cleanNumber = whatsappNumber.replace(/\D/g, '');
-      window.open(`https://wa.me/${cleanNumber}?text=Hi, I'm interested in your products!`, '_blank');
-    }
-  };
 
   const handleShare = async () => {
     try {
@@ -128,7 +127,12 @@ export function ShopHeader({
                 <h1 className="text-2xl sm:text-3xl font-bold truncate">{name}</h1>
                 <Badge variant="secondary" className="self-center sm:self-auto">
                   <Star className="w-3 h-3 mr-1 fill-yellow-400 text-yellow-400" />
-                  {rating}
+                  {rating ? rating.toFixed(1) : 'New'}
+                  {ratingCount > 0 && (
+                    <span className="ml-2 text-xs text-muted-foreground">
+                      ({ratingCount})
+                    </span>
+                  )}
                 </Badge>
               </div>
               
@@ -146,7 +150,7 @@ export function ShopHeader({
                 )}
                 <div className="flex items-center gap-1">
                   <Clock className="w-4 h-4" />
-                  <span>Usually responds in 1 hour</span>
+                  <span>{responseTime}</span>
                 </div>
                 {totalProducts > 0 && (
                   <div className="flex items-center gap-1">
@@ -156,17 +160,15 @@ export function ShopHeader({
                 )}
               </div>
 
-              {/* CTA Button */}
-              {whatsappNumber && (
-                <Button 
-                  onClick={handleWhatsAppClick}
-                  className="bg-green-500 hover:bg-green-600 text-white gap-2 rounded-full px-6 shadow-lg shadow-green-500/25"
-                  size="lg"
-                >
-                  <MessageCircle className="h-5 w-5" />
-                  Chat on WhatsApp
-                </Button>
+              {onMessageSeller && (
+                <div className="flex flex-wrap items-center justify-center sm:justify-start gap-3">
+                  <Button onClick={onMessageSeller} className="gap-2 rounded-full">
+                    <MessageSquare className="h-4 w-4" />
+                    Message Seller
+                  </Button>
+                </div>
               )}
+
             </div>
           </div>
         </div>

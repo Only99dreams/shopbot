@@ -18,7 +18,7 @@ const planFeatures = {
     features: [
       "Up to 50 products",
       "Basic analytics",
-      "WhatsApp integration",
+      "Order notifications",
       "Email support",
       "1 admin user",
     ],
@@ -29,7 +29,7 @@ const planFeatures = {
     features: [
       "Unlimited products",
       "Advanced analytics",
-      "Priority WhatsApp support",
+      "Priority support",
       "AI chatbot responses",
       "Up to 5 admin users",
       "Custom domain",

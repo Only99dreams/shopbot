@@ -87,6 +87,33 @@ export type Database = {
           },
         ]
       }
+      conversations: {
+        Row: {
+          id: string
+          shop_id: string
+          buyer_id: string
+          last_message: string | null
+          last_message_at: string | null
+          unread_count: number | null
+        }
+        Insert: {
+          id?: string
+          shop_id: string
+          buyer_id: string
+          last_message?: string | null
+          last_message_at?: string | null
+          unread_count?: number | null
+        }
+        Update: {
+          id?: string
+          shop_id?: string
+          buyer_id?: string
+          last_message?: string | null
+          last_message_at?: string | null
+          unread_count?: number | null
+        }
+        Relationships: []
+      }
       order_items: {
         Row: {
           id: string
@@ -191,6 +218,47 @@ export type Database = {
             columns: ["shop_id"]
             isOneToOne: false
             referencedRelation: "shops"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      messages: {
+        Row: {
+          id: string
+          conversation_id: string
+          sender_id: string
+          receiver_id: string
+          content: string
+          image_url: string | null
+          is_read: boolean | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          conversation_id: string
+          sender_id: string
+          receiver_id: string
+          content: string
+          image_url?: string | null
+          is_read?: boolean | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          conversation_id?: string
+          sender_id?: string
+          receiver_id?: string
+          content?: string
+          image_url?: string | null
+          is_read?: boolean | null
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "messages_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "conversations"
             referencedColumns: ["id"]
           },
         ]
@@ -816,6 +884,14 @@ export type Database = {
       increment_referral_count: {
         Args: { referrer_user_id: string }
         Returns: undefined
+      }
+      get_shop_metrics: {
+        Args: { p_shop_id: string }
+        Returns: Json
+      }
+      track_order_by_number: {
+        Args: { p_order_number: string }
+        Returns: Json
       }
     }
     Enums: {

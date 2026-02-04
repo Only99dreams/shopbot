@@ -13,7 +13,7 @@ const plans = [
     features: [
       "Up to 30 products",
       "Basic shop page",
-      "WhatsApp integration",
+      "Online ordering",
       "Order notifications",
       "Email support",
     ],

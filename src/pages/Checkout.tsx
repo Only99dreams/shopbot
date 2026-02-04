@@ -10,7 +10,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Badge } from '@/components/ui/badge';
-import { ChevronLeft, MessageCircle, Trash2, CreditCard, Loader2, Building2, ShoppingBag, Shield, Lock, Minus, Plus } from 'lucide-react';
+import { ChevronLeft, Trash2, CreditCard, Loader2, Building2, ShoppingBag, Shield, Lock, Minus, Plus } from 'lucide-react';
 import { toast } from 'sonner';
 import { z } from 'zod';
 import { BankTransferModal } from '@/components/storefront/BankTransferModal';
@@ -36,7 +36,7 @@ function CheckoutContent() {
     notes: ''
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const [paymentMethod, setPaymentMethod] = useState<'whatsapp' | 'paystack' | 'bank_transfer'>('bank_transfer');
+  const [paymentMethod, setPaymentMethod] = useState<'paystack' | 'bank_transfer'>('bank_transfer');
   const [isProcessing, setIsProcessing] = useState(false);
   const [bankTransferOrder, setBankTransferOrder] = useState<{
     orderId: string;
@@ -74,8 +74,8 @@ function CheckoutContent() {
     enabled: !!shopId
   });
 
-  // Check if subscription is active
-  const isSubscriptionActive = subscription?.status === 'active';
+  // Check if subscription is active (includes trial)
+  const isSubscriptionActive = subscription?.status === 'active' || subscription?.status === 'trial';
 
   const createOrder = useMutation({
     mutationFn: async () => {
@@ -135,30 +135,6 @@ function CheckoutContent() {
     }
   });
 
-  const handleWhatsAppCheckout = async (orderNumber: string) => {
-    if (shop?.whatsapp_number) {
-      const itemsList = items
-        .map(item => `• ${item.name} x${item.quantity} - ₦${(item.price * item.quantity).toLocaleString()}`)
-        .join('\n');
-
-      const message = encodeURIComponent(
-        `🛒 *NEW ORDER - ${orderNumber}*\n\n` +
-        `*Customer:* ${formData.name}\n` +
-        `*Phone:* ${formData.phone}\n` +
-        `*Address:* ${formData.address}\n\n` +
-        `*Items:*\n${itemsList}\n\n` +
-        `*Total:* ₦${getTotal().toLocaleString()}\n\n` +
-        `${formData.notes ? `*Notes:* ${formData.notes}` : ''}`
-      );
-
-      window.open(`https://wa.me/${shop.whatsapp_number.replace(/\D/g, '')}?text=${message}`, '_blank');
-    }
-
-    clearCart();
-    toast.success('Order placed successfully!');
-    navigate(`/shop/${shopId}`);
-  };
-
   const handlePaystackCheckout = async (orderId: string) => {
     try {
       const callbackUrl = `${window.location.origin}/shop/${shopId}?payment=success`;
@@ -202,9 +178,7 @@ function CheckoutContent() {
 
       const result = await createOrder.mutateAsync();
 
-      if (paymentMethod === 'whatsapp') {
-        await handleWhatsAppCheckout(result.orderNumber);
-      } else if (paymentMethod === 'paystack') {
+      if (paymentMethod === 'paystack') {
         await handlePaystackCheckout(result.order.id);
       } else if (paymentMethod === 'bank_transfer') {
         await handleBankTransferCheckout(result.order.id, result.orderNumber);
@@ -242,9 +216,9 @@ function CheckoutContent() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
             </svg>
           </div>
-          <h1 className="text-2xl font-bold mb-2">Shop Currently Unavailable</h1>
+          <h1 className="text-2xl font-bold mb-2">Subscription Required</h1>
           <p className="text-muted-foreground mb-6">
-            This shop is temporarily closed and cannot accept orders. Please check back later.
+            This shop is currently inactive and cannot accept orders. The seller needs to subscribe to activate the shop.
           </p>
           <Link to="/">
             <Button>Go Home</Button>
@@ -457,7 +431,7 @@ function CheckoutContent() {
                 {/* Payment Method */}
                 <div className="space-y-4 pt-4 border-t">
                   <h3 className="font-medium text-sm text-muted-foreground uppercase tracking-wide">Payment Method</h3>
-                  <RadioGroup value={paymentMethod} onValueChange={(v) => setPaymentMethod(v as 'whatsapp' | 'paystack' | 'bank_transfer')}>
+                  <RadioGroup value={paymentMethod} onValueChange={(v) => setPaymentMethod(v as 'paystack' | 'bank_transfer')}>
                     <div className={cn(
                       "flex items-center space-x-3 p-4 border-2 rounded-xl cursor-pointer transition-all",
                       paymentMethod === 'bank_transfer' 
@@ -496,25 +470,6 @@ function CheckoutContent() {
                         </div>
                       </Label>
                     </div>
-                    <div className={cn(
-                      "flex items-center space-x-3 p-4 border-2 rounded-xl cursor-pointer transition-all",
-                      paymentMethod === 'whatsapp' 
-                        ? "border-primary bg-primary/5" 
-                        : "border-transparent bg-muted/50 hover:bg-muted"
-                    )}>
-                      <RadioGroupItem value="whatsapp" id="whatsapp" />
-                      <Label htmlFor="whatsapp" className="flex-1 cursor-pointer">
-                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center">
-                            <MessageCircle className="h-5 w-5 text-emerald-600" />
-                          </div>
-                          <div>
-                            <p className="font-semibold">Pay on Delivery</p>
-                            <p className="text-sm text-muted-foreground">Order via WhatsApp</p>
-                          </div>
-                        </div>
-                      </Label>
-                    </div>
                   </RadioGroup>
                 </div>
 
@@ -528,10 +483,7 @@ function CheckoutContent() {
                 <Button
                   type="submit"
                   size="lg"
-                  className={cn(
-                    "w-full rounded-full h-14 text-base font-semibold shadow-lg",
-                    paymentMethod === 'whatsapp' && "bg-green-600 hover:bg-green-700 shadow-green-500/25"
-                  )}
+                  className="w-full rounded-full h-14 text-base font-semibold shadow-lg"
                   disabled={isProcessing}
                 >
                   {isProcessing ? (
@@ -544,15 +496,10 @@ function CheckoutContent() {
                       <CreditCard className="mr-2 h-5 w-5" />
                       Pay ₦{getTotal().toLocaleString()}
                     </>
-                  ) : paymentMethod === 'bank_transfer' ? (
+                  ) : (
                     <>
                       <Building2 className="mr-2 h-5 w-5" />
                       Place Order - ₦{getTotal().toLocaleString()}
-                    </>
-                  ) : (
-                    <>
-                      <MessageCircle className="mr-2 h-5 w-5" />
-                      Place Order via WhatsApp
                     </>
                   )}
                 </Button>

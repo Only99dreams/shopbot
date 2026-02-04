@@ -22,7 +22,21 @@ export default function AdminReferrals() {
         .select('*')
         .order('total_referrals', { ascending: false });
       if (error) throw error;
-      return data;
+
+      if (!data || data.length === 0) return [];
+
+      const userIds = data.map(code => code.user_id);
+      const { data: profilesData, error: profilesError } = await supabase
+        .from('profiles')
+        .select('id, full_name, email')
+        .in('id', userIds);
+
+      if (profilesError) throw profilesError;
+
+      return data.map(code => ({
+        ...code,
+        profile: profilesData?.find(profile => profile.id === code.user_id) || null,
+      }));
     },
   });
 
@@ -34,7 +48,26 @@ export default function AdminReferrals() {
         .select('*')
         .order('created_at', { ascending: false });
       if (error) throw error;
-      return data;
+
+      if (!data || data.length === 0) return [];
+
+      const profileIds = Array.from(new Set([
+        ...data.map(referral => referral.referrer_id),
+        ...data.map(referral => referral.referred_id),
+      ]));
+
+      const { data: profilesData, error: profilesError } = await supabase
+        .from('profiles')
+        .select('id, full_name, email')
+        .in('id', profileIds);
+
+      if (profilesError) throw profilesError;
+
+      return data.map(referral => ({
+        ...referral,
+        referrer_profile: profilesData?.find(profile => profile.id === referral.referrer_id) || null,
+        referred_profile: profilesData?.find(profile => profile.id === referral.referred_id) || null,
+      }));
     },
   });
 
@@ -102,7 +135,7 @@ export default function AdminReferrals() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Code</TableHead>
-                    <TableHead>User ID</TableHead>
+                    <TableHead>Seller</TableHead>
                     <TableHead>Total Referrals</TableHead>
                     <TableHead>Total Earnings</TableHead>
                     <TableHead>Created</TableHead>
@@ -112,7 +145,12 @@ export default function AdminReferrals() {
                   {referralCodes.map((code) => (
                     <TableRow key={code.id}>
                       <TableCell className="font-mono font-medium">{code.code}</TableCell>
-                      <TableCell className="text-muted-foreground text-sm">{code.user_id.substring(0, 8)}...</TableCell>
+                      <TableCell>
+                        <div>
+                          <p className="font-medium">{code.profile?.full_name || 'Unknown Seller'}</p>
+                          <p className="text-xs text-muted-foreground">{code.profile?.email || code.user_id.substring(0, 8) + '...'}</p>
+                        </div>
+                      </TableCell>
                       <TableCell>{code.total_referrals || 0}</TableCell>
                       <TableCell>₦{(code.total_earnings || 0).toLocaleString()}</TableCell>
                       <TableCell className="text-muted-foreground">
@@ -145,8 +183,8 @@ export default function AdminReferrals() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Referral Code</TableHead>
-                    <TableHead>Referrer ID</TableHead>
-                    <TableHead>Referred ID</TableHead>
+                    <TableHead>Referrer</TableHead>
+                    <TableHead>Referred</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead>Reward</TableHead>
                     <TableHead>Date</TableHead>
@@ -156,8 +194,18 @@ export default function AdminReferrals() {
                   {referrals.map((referral) => (
                     <TableRow key={referral.id}>
                       <TableCell className="font-mono">{referral.referral_code}</TableCell>
-                      <TableCell className="text-muted-foreground text-sm">{referral.referrer_id.substring(0, 8)}...</TableCell>
-                      <TableCell className="text-muted-foreground text-sm">{referral.referred_id.substring(0, 8)}...</TableCell>
+                      <TableCell>
+                        <div>
+                          <p className="font-medium">{referral.referrer_profile?.full_name || 'Unknown Seller'}</p>
+                          <p className="text-xs text-muted-foreground">{referral.referrer_profile?.email || referral.referrer_id.substring(0, 8) + '...'}</p>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div>
+                          <p className="font-medium">{referral.referred_profile?.full_name || 'Unknown User'}</p>
+                          <p className="text-xs text-muted-foreground">{referral.referred_profile?.email || referral.referred_id.substring(0, 8) + '...'}</p>
+                        </div>
+                      </TableCell>
                       <TableCell>{getStatusBadge(referral.status)}</TableCell>
                       <TableCell>₦{(referral.reward_amount || 0).toLocaleString()}</TableCell>
                       <TableCell className="text-muted-foreground">

@@ -4,7 +4,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { CartProvider, useCart } from '@/hooks/useCart';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { ChevronLeft, ShoppingCart, MessageCircle, Minus, Plus, Heart, Share2, Shield, Truck, RotateCcw, Star } from 'lucide-react';
+import { ChevronLeft, ShoppingCart, Minus, Plus, Heart, Share2, Shield, Truck, RotateCcw, Star } from 'lucide-react';
 import { useState } from 'react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { toast } from 'sonner';
@@ -81,8 +81,8 @@ function ProductDetailContent() {
     enabled: !!shopId
   });
 
-  // Check if subscription is active
-  const isSubscriptionActive = subscription?.status === 'active';
+  // Check if subscription is active (includes trial)
+  const isSubscriptionActive = subscription?.status === 'active' || subscription?.status === 'trial';
 
   const cartItem = items.find(item => item.id === productId);
   const isOutOfStock = product?.stock_quantity !== null && product?.stock_quantity <= 0;
@@ -100,15 +100,6 @@ function ProductDetailContent() {
         image: product.images?.[0] || undefined,
         shopId: shopId!
       });
-    }
-  };
-
-  const handleWhatsAppOrder = () => {
-    if (shop?.whatsapp_number && product) {
-      const message = encodeURIComponent(
-        `Hi! I'd like to order:\n\n*${product.name}*\nPrice: ₦${product.price.toLocaleString()}\n\nPlease confirm availability.`
-      );
-      window.open(`https://wa.me/${shop.whatsapp_number.replace(/\D/g, '')}?text=${message}`, '_blank');
     }
   };
 
@@ -155,9 +146,9 @@ function ProductDetailContent() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
             </svg>
           </div>
-          <h1 className="text-2xl font-bold mb-2">Shop Currently Unavailable</h1>
+          <h1 className="text-2xl font-bold mb-2">Subscription Required</h1>
           <p className="text-muted-foreground mb-6">
-            This shop is temporarily closed. Please check back later.
+            This shop is currently inactive. The seller needs to subscribe to activate the shop.
           </p>
           <Link to="/">
             <Button>Go Home</Button>
@@ -423,51 +414,6 @@ function ProductDetailContent() {
                 {isOutOfStock ? 'Out of Stock' : `Add to Cart${quantity > 1 ? ` (${quantity})` : ''}`}
               </Button>
             )}
-
-            {/* Message Seller */}
-            <Button
-              size="lg"
-              variant="outline"
-              className="w-full rounded-full h-12 text-base font-semibold"
-              onClick={async () => {
-                if (!shop || !product) return;
-                const { data: userData } = await supabase.auth.getUser();
-                const buyerId = userData?.data?.user?.id;
-                if (!buyerId) {
-                  toast.error('You must have a seller account to message sellers. Please sign up as a seller first.');
-                  navigate('/auth');
-                  return;
-                }
-
-                // find existing conversation
-                const { data: existing } = await supabase
-                  .from('conversations')
-                  .select('*')
-                  .eq('shop_id', shop.id)
-                  .eq('buyer_id', buyerId)
-                  .maybeSingle();
-
-                let convId = existing?.id;
-                if (!convId) {
-                  const { data: inserted, error } = await supabase
-                    .from('conversations')
-                    .insert({ shop_id: shop.id, buyer_id: buyerId, last_message: null, last_message_at: null })
-                    .select()
-                    .maybeSingle();
-                  if (error) {
-                    toast.error('Failed to start conversation');
-                    return;
-                  }
-                  convId = inserted.id;
-                }
-
-                navigate('/messages', { state: { conversationId: convId } });
-              }}
-              disabled={isOutOfStock}
-            >
-              <MessageCircle className="mr-2 h-5 w-5" />
-              Message Seller
-            </Button>
 
             {/* Rating UI */}
             <div className="mt-3">

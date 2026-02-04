@@ -11,7 +11,6 @@ import { useToast } from "@/hooks/use-toast";
 import {
   Copy,
   Check,
-  MessageCircle,
   Send,
   Mail,
   Share2,
@@ -80,12 +79,6 @@ export function ShareShopModal({ open, onOpenChange, shopLink, shopName }: Share
   };
 
   const shareOptions = [
-    {
-      name: "WhatsApp",
-      icon: MessageCircle,
-      color: "bg-[#25D366] hover:bg-[#20BD5A]",
-      url: `https://wa.me/?text=${encodedMessage}%20${encodedLink}`,
-    },
     {
       name: "Facebook",
       icon: FacebookIcon,

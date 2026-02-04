@@ -1,11 +1,11 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useLocation } from 'react-router-dom';
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Search, Send, Phone, MoreVertical, Image, Paperclip } from "lucide-react";
+import { Search, Send, Phone, MoreVertical, Image } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useShop } from "@/hooks/useShop";
 import { cn } from "@/lib/utils";
@@ -25,6 +25,7 @@ interface Message {
   sender_id: string;
   receiver_id: string;
   content: string;
+  image_url?: string | null;
   is_read?: boolean;
   created_at: string;
 }
@@ -38,6 +39,9 @@ export default function Messages() {
   const [newMessage, setNewMessage] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [showMobileChat, setShowMobileChat] = useState(false);
 
   useEffect(() => {
     if (shop?.id) {
@@ -75,7 +79,7 @@ export default function Messages() {
         setConversations((prev) => {
           const exists = prev.find(c => c.id === msg.conversation_id);
           if (exists) {
-            return prev.map(c => c.id === msg.conversation_id ? { ...c, last_message: msg.content, last_message_at: msg.created_at, unread_count: (c.unread_count || 0) + 1 } : c);
+            return prev.map(c => c.id === msg.conversation_id ? { ...c, last_message: msg.content || '📷 Photo', last_message_at: msg.created_at, unread_count: (c.unread_count || 0) + 1 } : c);
           }
           return prev;
         });
@@ -98,6 +102,12 @@ export default function Messages() {
     }
   }, [selectedConversation?.id]);
 
+  useEffect(() => {
+    if (selectedConversation) {
+      setShowMobileChat(true);
+    }
+  }, [selectedConversation]);
+
   const fetchConversations = async () => {
     if (!shop?.id) return;
     const { data } = await supabase
@@ -119,20 +129,45 @@ export default function Messages() {
     if (data) setMessages(data as any[]);
   };
 
-  const sendMessage = async () => {
-    if (!newMessage.trim() || !selectedConversation) return;
+  const uploadChatImage = async (file: File, conversationId: string) => {
+    if (!currentUserId) return null;
+    setUploading(true);
+    try {
+      const filePath = `chat/${conversationId}/${currentUserId}/${Date.now()}-${file.name}`;
+      const { error: uploadError } = await supabase.storage
+        .from("chat-images")
+        .upload(filePath, file, { upsert: false });
+
+      if (uploadError) throw uploadError;
+
+      const { data } = supabase.storage.from("chat-images").getPublicUrl(filePath);
+      return data.publicUrl;
+    } catch (error) {
+      console.error(error);
+      return null;
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const sendMessage = async (imageUrl?: string | null) => {
+    if (!selectedConversation) return;
+    const hasText = newMessage.trim().length > 0;
+    if (!hasText && !imageUrl) return;
     
     if (!shop) return;
     // get current authenticated user via Supabase
     const { data: userData } = await supabase.auth.getUser();
     const sender = userData?.user?.id || null;
     if (!sender) return;
+    const content = hasText ? newMessage.trim() : "";
 
       const { error } = await supabase.from("messages").insert({
       conversation_id: selectedConversation.id,
       sender_id: sender,
       receiver_id: (selectedConversation as any).buyer_id,
-      content: newMessage,
+      content,
+      image_url: imageUrl || null,
       is_read: false,
     });
 
@@ -141,12 +176,22 @@ export default function Messages() {
       await fetchMessages(selectedConversation.id);
       // Update conversation last_message and unread_count
       await supabase.from("conversations").update({
-        last_message: newMessage,
+        last_message: content || "📷 Photo",
         last_message_at: new Date().toISOString(),
         unread_count: (selectedConversation.unread_count || 0) + 1
       }).eq("id", selectedConversation.id);
       fetchConversations();
     }
+  };
+
+  const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !selectedConversation?.id) return;
+    const imageUrl = await uploadChatImage(file, selectedConversation.id);
+    if (imageUrl) {
+      await sendMessage(imageUrl);
+    }
+    if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
   const filteredConversations = conversations.filter(conv => 
@@ -177,10 +222,13 @@ export default function Messages() {
 
   return (
     <DashboardLayout>
-      <div className="h-[calc(100vh-2rem)] p-6 lg:p-8">
-        <div className="h-full flex gap-6">
+      <div className="min-h-[calc(100vh-2rem)] p-4 sm:p-6 lg:p-8">
+        <div className="h-full flex flex-col lg:flex-row gap-6">
           {/* Conversations List */}
-          <Card className="w-full max-w-sm shadow-card flex flex-col">
+          <Card className={cn(
+            "w-full max-w-sm shadow-card flex flex-col",
+            showMobileChat ? "hidden lg:flex" : "flex"
+          )}>
             <div className="p-4 border-b border-border">
               <h2 className="text-xl font-bold mb-4">Messages</h2>
               <div className="relative">
@@ -241,12 +289,23 @@ export default function Messages() {
           </Card>
 
           {/* Chat Area */}
-          <Card className="flex-1 shadow-card flex flex-col">
+          <Card className={cn(
+            "flex-1 shadow-card flex flex-col",
+            showMobileChat ? "flex" : "hidden lg:flex"
+          )}>
             {selectedConversation ? (
               <>
                 {/* Chat Header */}
                 <div className="p-4 border-b border-border flex items-center justify-between">
                   <div className="flex items-center gap-3">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="lg:hidden"
+                      onClick={() => setShowMobileChat(false)}
+                    >
+                      Back
+                    </Button>
                     <Avatar className="h-10 w-10">
                       <AvatarFallback className="bg-primary/10 text-primary">
                         {(selectedConversation.customer_name || selectedConversation.customer_phone).slice(0, 2).toUpperCase()}
@@ -294,7 +353,14 @@ export default function Messages() {
                               : "bg-muted rounded-bl-none"
                           )}
                         >
-                          <p>{msg.content}</p>
+                          {msg.content && <p>{msg.content}</p>}
+                          {msg.image_url && (
+                            <img
+                              src={msg.image_url}
+                              alt="Chat upload"
+                              className="mt-2 rounded-md max-h-64 object-cover"
+                            />
+                          )}
                           <span className={cn(
                             "text-xs mt-1 block",
                             isOutbound ? "text-primary-foreground/70" : "text-muted-foreground"
@@ -310,10 +376,19 @@ export default function Messages() {
                 {/* Message Input */}
                 <div className="p-4 border-t border-border">
                   <div className="flex items-center gap-2">
-                    <Button variant="ghost" size="icon">
-                      <Paperclip className="h-5 w-5" />
-                    </Button>
-                    <Button variant="ghost" size="icon">
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={handleImageChange}
+                    />
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={uploading}
+                    >
                       <Image className="h-5 w-5" />
                     </Button>
                     <Input
@@ -323,7 +398,7 @@ export default function Messages() {
                       onKeyDown={(e) => e.key === "Enter" && sendMessage()}
                       className="flex-1"
                     />
-                    <Button onClick={sendMessage} disabled={!newMessage.trim()}>
+                    <Button onClick={() => sendMessage()} disabled={!newMessage.trim() && !uploading}>
                       <Send className="h-5 w-5" />
                     </Button>
                   </div>

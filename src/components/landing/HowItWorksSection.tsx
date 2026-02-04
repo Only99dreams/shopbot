@@ -1,4 +1,4 @@
-import { UserPlus, Package, Share2, MessageCircle, ArrowRight, CheckCircle2 } from "lucide-react";
+import { UserPlus, Package, Share2, ArrowRight, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Link } from "react-router-dom";
 
@@ -7,7 +7,7 @@ const steps = [
     step: "01",
     icon: UserPlus,
     title: "Sign Up Free",
-    description: "Create your account in 2 minutes. Just your name, phone number, and WhatsApp. That's it!",
+    description: "Create your account in 2 minutes. Just your name, email, and phone number. That's it!",
     color: "bg-blue-500",
   },
   {
@@ -21,7 +21,7 @@ const steps = [
     step: "03",
     icon: Share2,
     title: "Share & Start Selling",
-    description: "Share your shop link on WhatsApp status, Facebook, Instagram — anywhere! Customers click, browse, and order.",
+    description: "Share your shop link on social media, Facebook, Instagram — anywhere! Customers click, browse, and order.",
     color: "bg-green-500",
   },
 ];
@@ -49,7 +49,7 @@ export function HowItWorksSection() {
             <span className="text-primary">3 Simple Steps</span>
           </h2>
           <p className="text-lg text-muted-foreground">
-            No tech skills? No problem! If you can use WhatsApp, you can use ShopAfrica.
+            No tech skills? No problem! Setting up your shop takes just 2 minutes.
           </p>
         </div>
 

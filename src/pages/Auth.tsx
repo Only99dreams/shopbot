@@ -3,7 +3,7 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Eye, EyeOff, ArrowRight, CheckCircle2, Loader2, MessageCircle } from "lucide-react";
+import { Eye, EyeOff, ArrowRight, CheckCircle2, Loader2, Mail } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { z } from "zod";
@@ -365,10 +365,10 @@ export default function Auth() {
       <div className="min-h-screen bg-background flex items-center justify-center p-8">
         <div className="w-full max-w-md space-y-8">
           <div className="text-center">
-            <div className="h-16 w-16 mx-auto rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center mb-4">
-              <MessageCircle className="h-8 w-8 text-green-600" />
+            <div className="h-16 w-16 mx-auto rounded-full bg-primary/10 flex items-center justify-center mb-4">
+              <Mail className="h-8 w-8 text-primary" />
             </div>
-            <h1 className="text-3xl font-bold">Verify your WhatsApp</h1>
+            <h1 className="text-3xl font-bold">Verify your Email</h1>
             <p className="mt-2 text-muted-foreground">
               We sent a 6-digit code to <strong>{registerData.phone}</strong>
             </p>
@@ -625,8 +625,8 @@ export default function Auth() {
                   <Loader2 className="h-5 w-5 animate-spin" />
                 ) : (
                   <>
-                    <MessageCircle className="h-5 w-5 mr-2" />
-                    Verify WhatsApp & Continue
+                    <ArrowRight className="h-5 w-5 mr-2" />
+                    Verify & Continue
                   </>
                 )}
               </Button>

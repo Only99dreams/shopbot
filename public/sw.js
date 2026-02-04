@@ -1,11 +1,10 @@
-const CACHE_NAME = 'shopafrica-pwa-v1';
+const CACHE_NAME = 'shopafrica-pwa-v4';
 const FILES_TO_CACHE = [
-  '/',
-  '/index.html',
   '/logo.png',
   '/manifest.webmanifest'
 ];
 
+// Skip caching index.html to always get fresh content
 self.addEventListener('install', (evt) => {
   evt.waitUntil(
     caches.open(CACHE_NAME).then((cache) => cache.addAll(FILES_TO_CACHE))
@@ -30,39 +29,48 @@ self.addEventListener('activate', (evt) => {
 self.addEventListener('fetch', (evt) => {
   if (evt.request.method !== 'GET') return;
 
-  // Skip caching in development (localhost)
-  if (self.location.hostname === 'localhost') {
-    evt.respondWith(fetch(evt.request).catch(() => caches.match('/')));
+  // Skip caching for API calls and Supabase
+  const url = new URL(evt.request.url);
+  if (url.hostname.includes('supabase') || url.pathname.startsWith('/api')) {
     return;
   }
 
-  // Skip caching for non-http(s) schemes (e.g. chrome-extension://)
+  // Skip caching in development (localhost)
+  if (self.location.hostname === 'localhost') {
+    return;
+  }
+
+  // Skip caching for non-http(s) schemes
   try {
-    const reqUrl = new URL(evt.request.url);
-    if (reqUrl.protocol !== 'http:' && reqUrl.protocol !== 'https:') {
-      evt.respondWith(fetch(evt.request).catch(() => caches.match('/')));
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') {
       return;
     }
   } catch (e) {
-    // If URL parsing fails, fall back to default fetch behavior
-    evt.respondWith(fetch(evt.request).catch(() => caches.match('/')));
     return;
   }
 
-  evt.respondWith(
-    caches.match(evt.request).then((cached) => {
-      if (cached) return cached;
-      return fetch(evt.request).then((response) => {
-        return caches.open(CACHE_NAME).then((cache) => {
-          try {
-            // Only attempt to cache successful HTTP responses
-            if (response && response.ok) {
-              cache.put(evt.request, response.clone());
-            }
-          } catch (e) {}
+  // Network-first for all navigation (HTML pages)
+  if (evt.request.mode === 'navigate') {
+    evt.respondWith(
+      fetch(evt.request)
+        .catch(() => caches.match('/'))
+    );
+    return;
+  }
+
+  // For static assets only, use cache with network fallback
+  if (url.pathname.match(/\.(js|css|png|jpg|jpeg|gif|svg|ico|woff|woff2)$/)) {
+    evt.respondWith(
+      caches.match(evt.request).then((cached) => {
+        if (cached) return cached;
+        return fetch(evt.request).then((response) => {
+          if (response && response.ok) {
+            const clone = response.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(evt.request, clone));
+          }
           return response;
         });
-      }).catch(() => caches.match('/'));
-    })
-  );
+      })
+    );
+  }
 });

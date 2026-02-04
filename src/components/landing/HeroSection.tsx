@@ -1,6 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { Link } from "react-router-dom";
-import { ArrowRight, MessageCircle, Star, Store, Users, ShoppingBag, Sparkles, CheckCircle2, MapPin, TrendingDown } from "lucide-react";
+import { ArrowRight, Star, Store, Users, ShoppingBag, Sparkles, CheckCircle2, MapPin, TrendingDown } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 
 const sellerTypes = [
@@ -8,8 +8,8 @@ const sellerTypes = [
   { emoji: "👗", label: "Fashion Sellers" },
   { emoji: "💅", label: "Beauty & Hair" },
   { emoji: "🛠️", label: "Service Providers" },
-  { emoji: "📱", label: "WhatsApp Vendors" },
   { emoji: "🏪", label: "Market Women" },
+  { emoji: "🛒", label: "Online Sellers" },
 ];
 
 const stats = [
@@ -31,10 +31,6 @@ export function HeroSection() {
           {/* Left content */}
           <div className="space-y-6">
             <div className="flex flex-wrap gap-2">
-              <Badge variant="secondary" className="bg-green-500/10 text-green-600 border-green-500/20 gap-1">
-                <MessageCircle className="h-3 w-3" />
-                WhatsApp Powered
-              </Badge>
               <Badge variant="secondary" className="bg-orange-500/10 text-orange-600 border-orange-500/20 gap-1">
                 <TrendingDown className="h-3 w-3" />
                 Compare Prices
@@ -150,11 +146,6 @@ export function HeroSection() {
                   ))}
                 </div>
 
-                {/* WhatsApp Order Button */}
-                <Button className="w-full bg-green-500 hover:bg-green-600 text-white gap-2 h-12 rounded-xl">
-                  <MessageCircle className="h-5 w-5" />
-                  Order via WhatsApp
-                </Button>
               </div>
 
               {/* Floating Stats */}

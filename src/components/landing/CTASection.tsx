@@ -1,6 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { Link } from "react-router-dom";
-import { ArrowRight, MessageCircle, Store, Users, Sparkles } from "lucide-react";
+import { ArrowRight, Store, Users, Sparkles } from "lucide-react";
 
 const sellerCategories = [
   { emoji: "🍲", label: "Food Vendors" },
@@ -72,12 +72,6 @@ export function CTASection() {
                     <ArrowRight className="h-5 w-5" />
                   </Button>
                 </Link>
-                <a href="https://wa.me/2348000000000?text=Hi! I want to learn more about ShopAfrica" target="_blank" rel="noopener noreferrer">
-                  <Button size="lg" variant="outline" className="w-full sm:w-auto border-white/30 text-white hover:bg-white/10 gap-2 h-14 px-8">
-                    <MessageCircle className="h-5 w-5" />
-                    Chat with Us
-                  </Button>
-                </a>
               </div>
 
               <div className="mt-8 pt-8 border-t border-white/20 grid grid-cols-3 gap-4 max-w-md mx-auto">
@@ -103,8 +97,7 @@ export function CTASection() {
           <p className="text-muted-foreground">
             Have questions? Check our{" "}
             <a href="#" className="text-primary hover:underline font-medium">FAQ</a>
-            {" "}or{" "}
-            <a href="https://wa.me/2348000000000" className="text-primary hover:underline font-medium">chat with us on WhatsApp</a>
+            {" "}or contact our support team.
           </p>
         </div>
       </div>
