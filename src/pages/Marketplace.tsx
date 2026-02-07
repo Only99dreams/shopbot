@@ -158,14 +158,14 @@ export default function Marketplace() {
         throw error;
       }
       
-      // Filter shops that are active and have active or trial subscription
+      // Filter shops that are active and have active subscription
       const filteredShops = (data || []).filter(shop => {
         const isActive = shop.is_active !== false;
         const subscription = Array.isArray(shop.subscriptions)
           ? shop.subscriptions[0]
           : shop.subscriptions;
         const status = subscription?.status;
-        const hasValidSubscription = !subscription || status === 'active' || status === 'trial';
+        const hasValidSubscription = !subscription || status === 'active';
 
         return isActive && hasValidSubscription;
       });
@@ -217,7 +217,7 @@ export default function Marketplace() {
           ? shop.subscriptions[0]
           : shop.subscriptions;
         const status = subscription?.status;
-        const hasValidSubscription = !subscription || status === 'active' || status === 'trial';
+        const hasValidSubscription = !subscription || status === 'active';
 
         if (!hasValidSubscription) {
           return false;

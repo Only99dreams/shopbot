@@ -107,7 +107,7 @@ export default function Auth() {
       if (data?.success) {
         toast({
           title: "OTP Sent!",
-          description: "Check your WhatsApp for the verification code.",
+          description: "Check your phone for the verification code.",
         });
         setResendCooldown(60);
         return true;
@@ -458,7 +458,7 @@ export default function Auth() {
                 <img src="/logo.png" alt="ShopAfrica" className="h-full w-full object-contain" />
               </div>
               <h2 className="text-3xl font-bold mb-4">
-                "Sell Smarter on WhatsApp"
+                "Sell Smarter Online"
               </h2>
               <p className="text-primary-foreground/80 text-lg">
                 Access your dashboard to manage products, track orders, and grow your business with AI-powered insights.
@@ -467,10 +467,10 @@ export default function Auth() {
           ) : (
             <>
               <h2 className="text-4xl font-bold mb-6">
-                Start Selling on WhatsApp Today
+                Start Selling Online Today
               </h2>
               <p className="text-primary-foreground/80 text-lg mb-8">
-                Join 10,000+ sellers who are growing their business with WhatsApp Shop.
+                Join 10,000+ sellers who are growing their business with ShopAfrica.
               </p>
               <ul className="space-y-4">
                 {benefits.map((benefit) => (
@@ -498,8 +498,8 @@ export default function Auth() {
             </h1>
             <p className="mt-2 text-muted-foreground">
               {isLogin 
-                ? "Sign in to manage your WhatsApp shop" 
-                : "Start your 14-day free trial. No credit card required."}
+                ? "Sign in to manage your shop" 
+                : "Create your shop and start selling today."}
             </p>
           </div>
 
@@ -585,7 +585,7 @@ export default function Auth() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="phone">WhatsApp Number</Label>
+                <Label htmlFor="phone">Phone Number</Label>
                 <Input
                   id="phone"
                   type="tel"

@@ -57,7 +57,7 @@ const testimonials = [
   {
     name: "Mama Chioma",
     business: "Food Vendor, Lagos",
-    text: "I used to take orders on paper. Now I get orders on WhatsApp and know exactly who owes me. Sales doubled in 2 months!",
+    text: "I used to take orders on paper. Now I get orders online and know exactly who owes me. Sales doubled in 2 months!",
     avatar: "👩🏾‍🍳",
   },
   {

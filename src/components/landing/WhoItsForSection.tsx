@@ -46,8 +46,8 @@ const sellerProfiles = [
   },
   {
     emoji: "📱",
-    title: "WhatsApp Vendors",
-    description: "Already selling on WhatsApp? Upgrade with a professional shop page",
+    title: "Online Sellers",
+    description: "Already selling on social media? Upgrade with a professional shop page",
     benefits: ["Shop link", "Auto-replies", "Payment tracking"],
     color: "from-green-500/20 to-teal-500/20",
     borderColor: "border-green-500/30",

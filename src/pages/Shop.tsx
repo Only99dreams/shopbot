@@ -25,6 +25,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 function ShopContent() {
   const { shopId } = useParams<{ shopId: string }>();
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
@@ -267,8 +268,8 @@ function ShopContent() {
     );
   }
 
-  // Check if subscription is active (includes trial)
-  const isSubscriptionActive = subscription?.status === 'active' || subscription?.status === 'trial';
+  // Check if subscription is active
+  const isSubscriptionActive = subscription?.status === 'active';
 
   if (!isSubscriptionActive) {
     return (
@@ -540,7 +541,7 @@ function ShopContent() {
                                 </button>
                               ))}
                             </div>
-                            <textarea value={ratingReview} onChange={(e) => setRatingReview(e.target.value)} className="w-full p-2 border rounded-md mb-2" placeholder="Write a short review (optional)" />
+                            <textarea value={ratingReview} onChange={(e) => setRatingReview(e.target.value)} className="w-full p-2 border rounded-md mb-2 text-black" placeholder="Write a short review (optional)" />
                             <div className="flex gap-2">
                               <Button onClick={async () => {
                                 const { data: userData } = await supabase.auth.getUser();

@@ -7,8 +7,8 @@ export function useMessageNotifications() {
   useEffect(() => {
     let mounted = true;
     async function init() {
-      const { data: userData } = await supabase.auth.getUser();
-      const userId = userData?.data?.user?.id;
+      const { data: { user } } = await supabase.auth.getUser();
+      const userId = user?.id;
       if (!userId) return;
 
       const { count: c } = await supabase

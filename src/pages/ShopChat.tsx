@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { useNavigate, useParams, Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -39,6 +39,26 @@ export default function ShopChat() {
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const messagesEndRef = useRef<HTMLDivElement | null>(null);
+
+  const scrollToBottom = useCallback(() => {
+    setTimeout(() => {
+      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }, 50);
+  }, []);
+
+  const fetchMessages = useCallback(async (conversationId: string) => {
+    const { data } = await supabase
+      .from("messages")
+      .select("*")
+      .eq("conversation_id", conversationId)
+      .order("created_at", { ascending: true });
+
+    if (data) {
+      setMessages(data as Message[]);
+      scrollToBottom();
+    }
+  }, [scrollToBottom]);
 
   useEffect(() => {
     const init = async () => {
@@ -86,7 +106,7 @@ export default function ShopChat() {
     };
 
     init();
-  }, [shopId]);
+  }, [shopId, fetchMessages]);
 
   useEffect(() => {
     if (!conversation?.id) return;
@@ -97,7 +117,12 @@ export default function ShopChat() {
       (payload) => {
         const msg = payload.new as Message;
         if (msg.conversation_id === conversation.id) {
-          setMessages((prev) => [...prev, msg]);
+          setMessages((prev) => {
+            // Prevent duplicates
+            if (prev.some((m) => m.id === msg.id)) return prev;
+            return [...prev, msg];
+          });
+          scrollToBottom();
         }
       }
     ).subscribe();
@@ -105,17 +130,7 @@ export default function ShopChat() {
     return () => {
       channel.unsubscribe();
     };
-  }, [conversation?.id]);
-
-  const fetchMessages = async (conversationId: string) => {
-    const { data } = await supabase
-      .from("messages")
-      .select("*")
-      .eq("conversation_id", conversationId)
-      .order("created_at", { ascending: true });
-
-    if (data) setMessages(data as Message[]);
-  };
+  }, [conversation?.id, scrollToBottom]);
 
   const uploadChatImage = async (file: File, conversationId: string) => {
     if (!currentUserId) return null;
@@ -149,24 +164,30 @@ export default function ShopChat() {
     const receiverId = currentUserId === conversation.buyer_id ? sellerId : conversation.buyer_id;
     const content = hasText ? newMessage.trim() : "";
 
+    // Clear input immediately for responsiveness
+    const msgText = content;
+    setNewMessage("");
+
     const { error } = await supabase.from("messages").insert({
       conversation_id: conversation.id,
       sender_id: currentUserId,
       receiver_id: receiverId,
-      content,
+      content: msgText,
       image_url: imageUrl || null,
       is_read: false,
     });
 
-    if (!error) {
-      setNewMessage("");
-      await supabase.from("conversations").update({
-        last_message: content || "📷 Photo",
-        last_message_at: new Date().toISOString(),
-        unread_count: (conversation.unread_count || 0) + 1,
-      }).eq("id", conversation.id);
-      fetchMessages(conversation.id);
+    if (error) {
+      toast.error("Failed to send message");
+      setNewMessage(msgText); // Restore on failure
+      return;
     }
+
+    // Update conversation metadata
+    await supabase.from("conversations").update({
+      last_message: msgText || "📷 Photo",
+      last_message_at: new Date().toISOString(),
+    }).eq("id", conversation.id);
   };
 
   const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -237,12 +258,13 @@ export default function ShopChat() {
                         : "bg-muted rounded-bl-none"
                     )}
                   >
-                    {msg.content && <p>{msg.content}</p>}
+                    {msg.content && <p className="break-words">{msg.content}</p>}
                     {msg.image_url && (
                       <img
                         src={msg.image_url}
                         alt="Chat upload"
-                        className="mt-2 rounded-md max-h-64 object-cover"
+                        className="mt-2 rounded-md max-h-64 object-cover cursor-pointer"
+                        onClick={() => window.open(msg.image_url!, '_blank')}
                       />
                     )}
                     <span className={cn(
@@ -255,6 +277,7 @@ export default function ShopChat() {
                 );
               })
             )}
+            <div ref={messagesEndRef} />
           </div>
 
           <div className="p-4 border-t border-border">
@@ -278,7 +301,12 @@ export default function ShopChat() {
                 placeholder="Type a message..."
                 value={newMessage}
                 onChange={(e) => setNewMessage(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && sendMessage()}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    sendMessage();
+                  }
+                }}
                 className="flex-1"
               />
               <Button onClick={() => sendMessage()} disabled={!newMessage.trim() && !uploading}>

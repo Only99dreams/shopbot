@@ -78,14 +78,13 @@ export default function AdminDashboard() {
   const totalRevenue = payments?.reduce((sum, p) => sum + Number(p.amount), 0) || 0;
   const platformFees = payments?.reduce((sum, p) => sum + Number(p.platform_fee || 0), 0) || 0;
   const activeSubscriptions = subscriptions?.filter(s => s.status === 'active')?.length || 0;
-  const trialSubscriptions = subscriptions?.filter(s => s.status === 'trial')?.length || 0;
   const pendingPayoutsCount = pendingPayouts?.length || 0;
 
   const stats = [
     { title: "Total Sellers", value: totalSellers.toString(), change: `${activeShops} active`, icon: Users, color: "bg-blue-500" },
     { title: "Active Shops", value: activeShops.toString(), change: `${activeRate}% active rate`, icon: Store, color: "bg-green-500" },
     { title: "Total Revenue", value: `₦${totalRevenue.toLocaleString()}`, change: `₦${platformFees.toLocaleString()} platform fees`, icon: TrendingUp, color: "bg-purple-500" },
-    { title: "Subscriptions", value: (activeSubscriptions + trialSubscriptions).toString(), change: `${activeSubscriptions} active, ${trialSubscriptions} trial`, icon: CreditCard, color: "bg-orange-500" },
+    { title: "Subscriptions", value: activeSubscriptions.toString(), change: `${activeSubscriptions} active`, icon: CreditCard, color: "bg-orange-500" },
   ];
 
   const getStatusBadge = (status: string) => {

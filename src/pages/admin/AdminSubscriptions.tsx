@@ -22,14 +22,13 @@ export default function AdminSubscriptions() {
         <div><h1 className="text-3xl font-bold flex items-center gap-2"><CreditCard className="h-8 w-8" /> Subscriptions</h1><p className="text-muted-foreground">Manage all subscriptions</p></div>
         <div className="border rounded-lg">
           <Table>
-            <TableHeader><TableRow><TableHead>Shop</TableHead><TableHead>Plan</TableHead><TableHead>Status</TableHead><TableHead>Trial Ends</TableHead><TableHead>Created</TableHead></TableRow></TableHeader>
+            <TableHeader><TableRow><TableHead>Shop</TableHead><TableHead>Plan</TableHead><TableHead>Status</TableHead><TableHead>Created</TableHead></TableRow></TableHeader>
             <TableBody>
-              {isLoading ? <TableRow><TableCell colSpan={5} className="text-center py-8">Loading...</TableCell></TableRow> : subscriptions?.length === 0 ? <TableRow><TableCell colSpan={5} className="text-center py-8 text-muted-foreground">No subscriptions found</TableCell></TableRow> : subscriptions?.map(sub => (
+              {isLoading ? <TableRow><TableCell colSpan={4} className="text-center py-8">Loading...</TableCell></TableRow> : subscriptions?.length === 0 ? <TableRow><TableCell colSpan={4} className="text-center py-8 text-muted-foreground">No subscriptions found</TableCell></TableRow> : subscriptions?.map(sub => (
                 <TableRow key={sub.id}>
                   <TableCell className="font-medium">{(sub.shops as { name: string })?.name}</TableCell>
                   <TableCell className="capitalize">{sub.plan}</TableCell>
-                  <TableCell><Badge variant={sub.status === 'active' ? 'default' : sub.status === 'trial' ? 'secondary' : 'destructive'}>{sub.status}</Badge></TableCell>
-                  <TableCell>{sub.trial_ends_at ? format(new Date(sub.trial_ends_at), 'MMM d, yyyy') : 'N/A'}</TableCell>
+                  <TableCell><Badge variant={sub.status === 'active' ? 'default' : 'destructive'}>{sub.status}</Badge></TableCell>
                   <TableCell>{format(new Date(sub.created_at), 'MMM d, yyyy')}</TableCell>
                 </TableRow>
               ))}

@@ -74,8 +74,8 @@ function CheckoutContent() {
     enabled: !!shopId
   });
 
-  // Check if subscription is active (includes trial)
-  const isSubscriptionActive = subscription?.status === 'active' || subscription?.status === 'trial';
+  // Check if subscription is active
+  const isSubscriptionActive = subscription?.status === 'active';
 
   const createOrder = useMutation({
     mutationFn: async () => {

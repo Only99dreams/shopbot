@@ -23,7 +23,7 @@ const formatCurrency = (amount: number) => {
 export function SubscriptionPaymentModal({ open, onOpenChange, plan }: SubscriptionPaymentModalProps) {
   const handlePayWithFlutterwave = () => {
     // Open Flutterwave payment link in new tab
-    window.open('https://flutterwave.com/pay/vpseacijkef8', '_blank');
+    window.open('https://flutterwave.com/pay/d1rzwyjp2xlr', '_blank');
     // Close the modal after opening payment link
     onOpenChange(false);
   };

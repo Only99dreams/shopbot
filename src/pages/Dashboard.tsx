@@ -80,14 +80,6 @@ export default function Dashboard() {
 
   const shopLink = shop ? `${window.location.origin}/shop/${shop.id}` : '';
 
-  const getTrialDaysLeft = () => {
-    if (!subscription?.trial_ends_at) return 0;
-    const endDate = new Date(subscription.trial_ends_at);
-    const today = new Date();
-    const diff = Math.ceil((endDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-    return Math.max(0, diff);
-  };
-
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-NG', {
       style: 'currency',

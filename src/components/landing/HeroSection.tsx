@@ -54,7 +54,7 @@ export function HeroSection() {
             </h1>
 
             <p className="text-lg md:text-xl text-muted-foreground max-w-xl">
-              Whether you sell food, fashion, beauty products or offer services — ShopAfrica gives you a professional online shop that works right inside WhatsApp. No tech skills needed!
+              Whether you sell food, fashion, beauty products or offer services — ShopAfrica gives you a professional online shop to grow your business. No tech skills needed!
             </p>
 
             {/* Seller Types */}

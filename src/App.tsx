@@ -150,8 +150,8 @@ function MessageToastListener() {
   useEffect(() => {
     let mounted = true;
     (async () => {
-      const { data: userData } = await supabase.auth.getUser();
-      const userId = userData?.data?.user?.id;
+      const { data: { user } } = await supabase.auth.getUser();
+      const userId = user?.id;
       if (!userId) return;
 
       const channel = supabase.channel('public:messages:toasts').on(

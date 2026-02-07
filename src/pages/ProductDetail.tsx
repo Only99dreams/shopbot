@@ -81,8 +81,8 @@ function ProductDetailContent() {
     enabled: !!shopId
   });
 
-  // Check if subscription is active (includes trial)
-  const isSubscriptionActive = subscription?.status === 'active' || subscription?.status === 'trial';
+  // Check if subscription is active
+  const isSubscriptionActive = subscription?.status === 'active';
 
   const cartItem = items.find(item => item.id === productId);
   const isOutOfStock = product?.stock_quantity !== null && product?.stock_quantity <= 0;
@@ -505,7 +505,7 @@ function RatingForm({ shop }: { shop: any }) {
           </button>
         ))}
       </div>
-      <textarea value={review} onChange={(e) => setReview(e.target.value)} className="w-full p-2 border rounded-md" placeholder="Write a short review (optional)" />
+      <textarea value={review} onChange={(e) => setReview(e.target.value)} className="w-full p-2 border rounded-md text-black" placeholder="Write a short review (optional)" />
       <div>
         <Button onClick={submitRating} size="sm">Submit Rating</Button>
       </div>

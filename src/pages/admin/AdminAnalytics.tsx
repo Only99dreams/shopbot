@@ -91,8 +91,8 @@ export default function AdminAnalytics() {
   });
 
   const subscriptionData = [
-    { name: 'Trial', value: subscriptions?.filter(s => s.status === 'trial').length || 0 },
     { name: 'Active', value: subscriptions?.filter(s => s.status === 'active').length || 0 },
+    { name: 'Inactive', value: subscriptions?.filter(s => s.status === 'inactive').length || 0 },
     { name: 'Cancelled', value: subscriptions?.filter(s => s.status === 'cancelled').length || 0 },
   ].filter(item => item.value > 0);
 
