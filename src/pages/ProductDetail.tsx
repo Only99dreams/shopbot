@@ -81,8 +81,8 @@ function ProductDetailContent() {
     enabled: !!shopId
   });
 
-  // Check if subscription is active
-  const isSubscriptionActive = subscription?.status === 'active';
+  // Check if subscription is active OR shop is_active (legacy support)
+  const isSubscriptionActive = subscription?.status === 'active' || shop?.is_active === true;
 
   const cartItem = items.find(item => item.id === productId);
   const isOutOfStock = product?.stock_quantity !== null && product?.stock_quantity <= 0;

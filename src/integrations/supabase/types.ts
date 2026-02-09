@@ -407,6 +407,7 @@ export type Database = {
           bank_name: string | null
           created_at: string
           id: string
+          payout_type: string | null
           processed_at: string | null
           processed_by: string | null
           shop_id: string
@@ -420,6 +421,7 @@ export type Database = {
           bank_name?: string | null
           created_at?: string
           id?: string
+          payout_type?: string | null
           processed_at?: string | null
           processed_by?: string | null
           shop_id: string
@@ -433,6 +435,7 @@ export type Database = {
           bank_name?: string | null
           created_at?: string
           id?: string
+          payout_type?: string | null
           processed_at?: string | null
           processed_by?: string | null
           shop_id?: string
@@ -570,24 +573,30 @@ export type Database = {
           code: string
           created_at: string
           id: string
+          available_balance: number | null
           total_earnings: number | null
           total_referrals: number | null
+          total_withdrawn: number | null
           user_id: string
         }
         Insert: {
           code: string
           created_at?: string
           id?: string
+          available_balance?: number | null
           total_earnings?: number | null
           total_referrals?: number | null
+          total_withdrawn?: number | null
           user_id: string
         }
         Update: {
           code?: string
           created_at?: string
           id?: string
+          available_balance?: number | null
           total_earnings?: number | null
           total_referrals?: number | null
+          total_withdrawn?: number | null
           user_id?: string
         }
         Relationships: []

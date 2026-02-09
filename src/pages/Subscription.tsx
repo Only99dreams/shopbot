@@ -1,14 +1,17 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
+import { useSearchParams } from "react-router-dom";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Check, Crown, Zap, Building2, Clock, Receipt, Loader2 } from "lucide-react";
+import { Check, Crown, Zap, Building2, Clock, Loader2, CheckCircle } from "lucide-react";
 import { useShop } from "@/hooks/useShop";
-import { usePaymentProofs } from "@/hooks/usePaymentProofs";
 import { useSubscriptionPlans } from "@/hooks/usePlatformSettings";
 import { cn } from "@/lib/utils";
 import { SubscriptionPaymentModal } from "@/components/subscription/SubscriptionPaymentModal";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
+import { useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
 
 const planFeatures = {
@@ -61,13 +64,197 @@ const formatCurrency = (amount: number) => {
 };
 
 export default function Subscription() {
-  const { subscription, shop } = useShop();
-  const { data: paymentProofs } = usePaymentProofs();
+  const { subscription, shop, refetch: refetchShop } = useShop();
   const { data: subscriptionPlans, isLoading: loadingPlans } = useSubscriptionPlans();
   const [selectedPlan, setSelectedPlan] = useState<{ id: string; name: string; price: number } | null>(null);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [verifying, setVerifying] = useState(false);
+  const [paymentSuccess, setPaymentSuccess] = useState(false);
+  const [billingHistory, setBillingHistory] = useState<any[]>([]);
+  const [billingLoading, setBillingLoading] = useState(false);
+  const queryClient = useQueryClient();
+  const verificationAttempted = useRef(false);
 
   const currentPlan = subscription?.plan || "starter";
-  const isInactive = subscription?.status === "inactive";
+  const isInactive = subscription?.status !== "active";
+
+  const currentPlanAmount = selectedPlan?.price
+    ?? (subscriptionPlans && (subscriptionPlans as any)[currentPlan]?.price)
+    ?? 0;
+
+  // Detect Flutterwave callback params on mount
+  const transactionId = searchParams.get('transaction_id');
+  const flwStatus = searchParams.get('status');
+  const hasFlutterwaveCallback = !!(transactionId && flwStatus === 'successful');
+  
+  console.log('Subscription page params:', { transactionId, flwStatus, hasFlutterwaveCallback });
+
+  const loadBillingHistory = async () => {
+    if (!shop?.id) return;
+    setBillingLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('payment_proofs')
+        .select('*')
+        .eq('shop_id', shop.id)
+        .eq('payment_type', 'subscription')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setBillingHistory(data || []);
+    } catch (error) {
+      console.error('Error loading billing history:', error);
+    } finally {
+      setBillingLoading(false);
+    }
+  };
+
+  // Handle Flutterwave payment callback - activate subscription directly
+  useEffect(() => {
+    console.log('Activation effect deps:', { hasFlutterwaveCallback, shopId: shop?.id, verificationAttempted: verificationAttempted.current });
+    
+    if (!hasFlutterwaveCallback || verificationAttempted.current) {
+      return;
+    }
+
+    // Don't proceed if shop data isn't loaded yet
+    if (!shop?.id) {
+      console.log('Waiting for shop data...');
+      return;
+    }
+
+    verificationAttempted.current = true;
+    setVerifying(true);
+    
+    const activateSubscription = async () => {
+      try {
+        const shopId = shop.id;
+        const planId = selectedPlan?.id || currentPlan || 'starter';
+        console.log('Flutterwave callback detected - Activating subscription for shop:', shopId, 'plan:', planId);
+
+        const now = new Date();
+        const periodEnd = new Date(now);
+        periodEnd.setMonth(periodEnd.getMonth() + 1);
+
+        // Check if subscription exists
+        const { data: existingSub, error: fetchError } = await supabase
+          .from('subscriptions')
+          .select('id')
+          .eq('shop_id', shopId)
+          .maybeSingle();
+
+        if (fetchError) {
+          console.error('Error fetching subscription:', fetchError);
+          throw fetchError;
+        }
+
+        // Update or insert subscription
+        let subscriptionId: string | null = null;
+
+        if (existingSub) {
+          console.log('Updating existing subscription:', existingSub.id);
+          const { error: updateError } = await supabase
+            .from('subscriptions')
+            .update({
+              status: 'active',
+              plan: planId,
+              current_period_start: now.toISOString(),
+              current_period_end: periodEnd.toISOString(),
+            })
+            .eq('id', existingSub.id);
+
+          if (updateError) {
+            console.error('Error updating subscription:', updateError);
+            throw updateError;
+          }
+
+          subscriptionId = existingSub.id;
+        } else {
+          console.log('Creating new subscription');
+          const { data: insertedSub, error: insertError } = await supabase
+            .from('subscriptions')
+            .insert({
+              shop_id: shopId,
+              plan: planId,
+              status: 'active',
+              current_period_start: now.toISOString(),
+              current_period_end: periodEnd.toISOString(),
+            })
+            .select('id')
+            .maybeSingle();
+
+          if (insertError) {
+            console.error('Error inserting subscription:', insertError);
+            throw insertError;
+          }
+
+          subscriptionId = insertedSub?.id ?? null;
+        }
+
+        // Activate the shop
+        console.log('Activating shop');
+        const { error: shopError } = await supabase
+          .from('shops')
+          .update({ is_active: true })
+          .eq('id', shopId);
+
+        if (shopError) {
+          console.error('Error activating shop:', shopError);
+          throw shopError;
+        }
+
+        // Record billing history (auto-approved)
+        if (subscriptionId && currentPlanAmount > 0) {
+          const { error: proofError } = await supabase
+            .from('payment_proofs')
+            .insert({
+              payment_type: 'subscription',
+              reference_id: subscriptionId,
+              shop_id: shopId,
+              amount: currentPlanAmount,
+              status: 'approved',
+              admin_notes: transactionId ? `Flutterwave transaction_id: ${transactionId}` : null,
+            });
+
+          if (proofError) {
+            console.error('Error recording payment proof:', proofError);
+          }
+        }
+
+        console.log('Subscription activated successfully! Refreshing shop state...');
+        setPaymentSuccess(true);
+        toast.success('Payment successful! Your subscription is now active.');
+        
+        // Refresh shop & subscription state and WAIT for it
+        await refetchShop();
+        await loadBillingHistory();
+        console.log('Shop state refreshed');
+      } catch (err) {
+        console.error('Activation error:', err);
+        toast.error('Activation failed: ' + (err instanceof Error ? err.message : 'Unknown error'));
+      } finally {
+        setVerifying(false);
+        // Clear URL params after a short delay to ensure state update completes
+        setTimeout(() => {
+          setSearchParams({}, { replace: true });
+        }, 500);
+      }
+    };
+
+    activateSubscription();
+  }, [hasFlutterwaveCallback, shop?.id, selectedPlan?.id, currentPlan]);
+
+  useEffect(() => {
+    loadBillingHistory();
+  }, [shop?.id]);
+
+  // Handle cancelled payment
+  useEffect(() => {
+    if (flwStatus === 'cancelled') {
+      toast.error('Payment was cancelled.');
+      setSearchParams({}, { replace: true });
+    }
+  }, [flwStatus]);
 
   // Build plans array from platform settings
   const plans = subscriptionPlans ? [
@@ -75,24 +262,6 @@ export default function Subscription() {
     { id: 'pro', name: subscriptionPlans.pro.name, price: subscriptionPlans.pro.price, ...planFeatures.pro },
     { id: 'business', name: subscriptionPlans.business.name, price: subscriptionPlans.business.price, ...planFeatures.business },
   ] : [];
-
-  // Get pending payment proofs for subscriptions
-  const pendingProofs = paymentProofs?.filter(
-    p => p.payment_type === 'subscription' && p.status === 'pending'
-  ) || [];
-
-  const getStatusBadge = (status: string) => {
-    switch (status) {
-      case 'approved':
-        return <Badge className="bg-green-500">Approved</Badge>;
-      case 'pending':
-        return <Badge variant="secondary">Pending Review</Badge>;
-      case 'rejected':
-        return <Badge variant="destructive">Rejected</Badge>;
-      default:
-        return <Badge variant="outline">{status}</Badge>;
-    }
-  };
 
   if (loadingPlans) {
     return (
@@ -113,18 +282,35 @@ export default function Subscription() {
           <p className="text-muted-foreground">Manage your subscription plan</p>
         </div>
 
-        {/* Pending Payment Notice */}
-        {pendingProofs.length > 0 && (
-          <Card className="shadow-card border-yellow-500/50 bg-yellow-500/5">
+        {/* Verifying Payment */}
+        {verifying && (
+          <Card className="shadow-card border-blue-500/50 bg-blue-500/5">
             <CardContent className="p-6">
               <div className="flex items-center gap-4">
-                <div className="p-3 rounded-full bg-yellow-500/10">
-                  <Receipt className="h-6 w-6 text-yellow-600" />
+                <Loader2 className="h-6 w-6 animate-spin text-blue-600" />
+                <div>
+                  <h3 className="font-semibold text-lg">Verifying Payment...</h3>
+                  <p className="text-muted-foreground">
+                    Please wait while we confirm your payment with Flutterwave.
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Payment Success */}
+        {paymentSuccess && (
+          <Card className="shadow-card border-green-500/50 bg-green-500/5">
+            <CardContent className="p-6">
+              <div className="flex items-center gap-4">
+                <div className="p-3 rounded-full bg-green-500/10">
+                  <CheckCircle className="h-6 w-6 text-green-600" />
                 </div>
                 <div>
-                  <h3 className="font-semibold text-lg">Payment Pending Review</h3>
+                  <h3 className="font-semibold text-lg">Subscription Activated!</h3>
                   <p className="text-muted-foreground">
-                    Your payment proof has been submitted and is awaiting admin approval.
+                    Your payment was successful and your shop is now active.
                   </p>
                 </div>
               </div>
@@ -133,7 +319,7 @@ export default function Subscription() {
         )}
 
         {/* Current Plan Status */}
-        {isInactive && pendingProofs.length === 0 && (
+        {isInactive && !verifying && !paymentSuccess && (
           <Card className="shadow-card border-amber-500/50 bg-amber-500/5">
             <CardContent className="p-6">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -144,7 +330,7 @@ export default function Subscription() {
                   <div>
                     <h3 className="font-semibold text-lg">Subscription Required</h3>
                     <p className="text-muted-foreground">
-                      Pay ₦1,000/month to activate your shop and start selling
+                      Subscribe to activate your shop and start selling
                     </p>
                   </div>
                 </div>
@@ -157,7 +343,6 @@ export default function Subscription() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {plans.map((plan) => {
             const isCurrentPlan = plan.id === currentPlan && subscription?.status === 'active';
-            const hasPendingPayment = pendingProofs.some(p => true);
             const PlanIcon = plan.icon;
             const isPopular = 'popular' in plan && plan.popular;
             
@@ -208,10 +393,10 @@ export default function Subscription() {
                   <Button 
                     className="w-full" 
                     variant={isCurrentPlan ? "outline" : isPopular ? "default" : "outline"}
-                    disabled={isCurrentPlan || hasPendingPayment}
-                    onClick={() => !isCurrentPlan && !hasPendingPayment && setSelectedPlan({ id: plan.id, name: plan.name, price: plan.price })}
+                    disabled={isCurrentPlan}
+                    onClick={() => !isCurrentPlan && setSelectedPlan({ id: plan.id, name: plan.name, price: plan.price })}
                   >
-                    {isCurrentPlan ? "Current Plan" : hasPendingPayment ? "Payment Pending" : "Subscribe"}
+                    {isCurrentPlan ? "Current Plan" : "Subscribe"}
                   </Button>
                 </CardContent>
               </Card>
@@ -219,43 +404,44 @@ export default function Subscription() {
           })}
         </div>
 
-        {/* Payment History */}
-        {paymentProofs && paymentProofs.length > 0 && (
-          <Card className="shadow-card">
-            <CardHeader>
-              <CardTitle>Payment History</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-3">
-                {paymentProofs.filter(p => p.payment_type === 'subscription').map((proof) => (
-                  <div key={proof.id} className="flex items-center justify-between p-4 rounded-lg bg-muted/50">
-                    <div>
-                      <p className="font-medium">Subscription Payment</p>
-                      <p className="text-sm text-muted-foreground">
-                        {format(new Date(proof.created_at), 'MMM d, yyyy h:mm a')}
-                      </p>
-                    </div>
-                    <div className="text-right">
-                      <p className="font-semibold">₦{proof.amount.toLocaleString()}</p>
-                      {getStatusBadge(proof.status)}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
         {/* Billing History */}
         <Card className="shadow-card">
           <CardHeader>
             <CardTitle>Billing History</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-center py-8 text-muted-foreground">
-              <p>No billing history yet</p>
-              <p className="text-sm">Transactions will appear here after your first payment</p>
-            </div>
+            {billingLoading ? (
+              <div className="text-center py-8 text-muted-foreground">
+                <p>Loading billing history...</p>
+              </div>
+            ) : billingHistory.length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground">
+                <p>No billing history yet</p>
+                <p className="text-sm">Transactions will appear here after your first payment</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {billingHistory.map((item) => (
+                  <div
+                    key={item.id}
+                    className="flex items-center justify-between rounded-lg border border-border bg-card/50 p-4"
+                  >
+                    <div>
+                      <p className="font-medium">Subscription payment</p>
+                      <p className="text-sm text-muted-foreground">
+                        {format(new Date(item.created_at), 'MMM d, yyyy')}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p className="font-semibold">{formatCurrency(Number(item.amount || 0))}</p>
+                      <Badge variant={item.status === 'approved' ? 'default' : 'secondary'}>
+                        {item.status}
+                      </Badge>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
 

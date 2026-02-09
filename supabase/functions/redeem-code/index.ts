@@ -6,24 +6,41 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// Always return 200 so supabase.functions.invoke() never sees a non-2xx.
+// The frontend reads data.success / data.error from the body instead.
+function jsonResponse(body: Record<string, unknown>) {
+  return new Response(JSON.stringify(body), {
+    status: 200,
+    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+  });
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
 
+  let code: string | undefined;
+  let action: string | undefined;
+  let orderId: string | undefined;
+
   try {
-    const { code, action, orderId } = await req.json();
+    let body: any;
+    try {
+      body = await req.json();
+    } catch (parseError) {
+      console.error('Failed to parse request body:', parseError);
+      return jsonResponse({ success: false, error: 'Invalid request body' });
+    }
+
+    code = body?.code;
+    action = body?.action;
+    orderId = body?.orderId;
 
     console.log('Redeem code request:', { code, action, orderId });
 
     if (!action) {
-      return new Response(JSON.stringify({
-        success: false,
-        error: 'Action is required',
-      }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 400,
-      });
+      return jsonResponse({ success: false, error: 'Action is required' });
     }
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
@@ -34,6 +51,8 @@ serve(async (req) => {
     if (action === 'confirm_receipt' && orderId) {
       console.log('Confirm receipt action with orderId:', orderId);
 
+      let order: any | null = null;
+
       // Check if this is an anonymous confirmation (from marketplace tracking)
       const isAnonymous = code === 'DIRECT_CONFIRM';
       console.log('Is anonymous confirmation:', isAnonymous);
@@ -42,77 +61,63 @@ serve(async (req) => {
         // Authenticated confirmation (original logic)
         const authHeader = req.headers.get('Authorization');
         if (!authHeader) {
-          return new Response(JSON.stringify({
-            success: false,
-            error: 'Authentication required',
-          }), {
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-            status: 401,
-          });
+          return jsonResponse({ success: false, error: 'Authentication required' });
         }
 
-        // Verify the user
         const token = authHeader.replace('Bearer ', '');
         const { data: { user }, error: authError } = await supabase.auth.getUser(token);
 
         if (authError || !user) {
-          return new Response(JSON.stringify({
-            success: false,
-            error: 'Authentication failed',
-          }), {
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-            status: 401,
-          });
+          return jsonResponse({ success: false, error: 'Authentication failed' });
         }
 
-        // Get the order and verify ownership
-        const { data: order, error: orderError } = await supabase
+        const { data: orderData, error: orderError } = await supabase
           .from('orders')
           .select('*')
           .eq('id', orderId)
           .eq('customer_id', user.id)
           .eq('payment_status', 'paid')
           .eq('redemption_confirmed', false)
-          .single();
+          .maybeSingle();
 
-        if (orderError || !order) {
-          return new Response(JSON.stringify({
-            success: false,
-            error: 'Order not found or already confirmed',
-          }), {
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-            status: 404,
-          });
+        if (orderError) {
+          console.error('Order query error:', orderError);
+          return jsonResponse({ success: false, error: 'Failed to look up order' });
         }
+
+        if (!orderData) {
+          return jsonResponse({ success: false, error: 'Order not found or already confirmed' });
+        }
+
+        order = orderData;
       } else {
         // Anonymous confirmation (from marketplace tracking)
         console.log('Anonymous confirmation for orderId:', orderId);
 
-        // Get the order by ID only (no customer verification needed)
-        const { data: order, error: orderError } = await supabase
+        const { data: orderData, error: orderError } = await supabase
           .from('orders')
           .select('*')
           .eq('id', orderId)
           .eq('payment_status', 'paid')
           .eq('redemption_confirmed', false)
-          .single();
+          .maybeSingle();
 
-        console.log('Order query result:', { order, orderError });
+        console.log('Order query result:', { order: orderData, orderError });
 
-        if (orderError || !order) {
-          console.log('Order not found or already confirmed:', { orderError, order });
-          return new Response(JSON.stringify({
-            success: false,
-            error: 'Order not found or already confirmed',
-          }), {
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-            status: 404,
-          });
+        if (orderError) {
+          console.error('Order query error:', orderError);
+          return jsonResponse({ success: false, error: 'Failed to look up order' });
         }
+
+        if (!orderData) {
+          return jsonResponse({ success: false, error: 'Order not found or already confirmed' });
+        }
+
+        order = orderData;
       }
 
       // Update order (works for both authenticated and anonymous)
-      await supabase
+      const { error: updateOrderError } = await supabase
         .from('orders')
         .update({
           status: 'completed',
@@ -120,19 +125,36 @@ serve(async (req) => {
         })
         .eq('id', orderId);
 
-      // Get payment and credit seller if not already credited
-      const { data: payment } = await supabase
+      if (updateOrderError) {
+        console.error('Failed to update order:', updateOrderError);
+        return jsonResponse({ success: false, error: 'Failed to update order' });
+      }
+
+      if (!order) {
+        return jsonResponse({ success: false, error: 'Order not found' });
+      }
+
+      const { data: payment, error: paymentError } = await supabase
         .from('payments')
         .select('*')
         .eq('order_id', orderId)
-        .single();
+        .maybeSingle();
+
+      if (paymentError) {
+        console.error('Payment query error:', paymentError);
+        // Non-fatal: order is already confirmed, just log
+      }
 
       if (payment && !payment.credited_to_seller) {
-        const { data: wallet } = await supabase
+        const { data: wallet, error: walletError } = await supabase
           .from('seller_wallets')
           .select('*')
           .eq('shop_id', order.shop_id)
-          .single();
+          .maybeSingle();
+
+        if (walletError) {
+          console.error('Wallet query error:', walletError);
+        }
 
         if (wallet) {
           await supabase
@@ -142,33 +164,30 @@ serve(async (req) => {
               total_earned: wallet.total_earned + payment.seller_amount,
             })
             .eq('id', wallet.id);
-
+        } else {
           await supabase
-            .from('payments')
-            .update({
-              credited_to_seller: true,
-              credited_at: new Date().toISOString(),
-            })
-            .eq('id', payment.id);
+            .from('seller_wallets')
+            .insert({
+              shop_id: order.shop_id,
+              balance: payment.seller_amount,
+              total_earned: payment.seller_amount,
+            });
         }
+
+        await supabase
+          .from('payments')
+          .update({
+            credited_to_seller: true,
+            credited_at: new Date().toISOString(),
+          })
+          .eq('id', payment.id);
       }
 
-      return new Response(JSON.stringify({
-        success: true,
-        message: 'Receipt confirmed successfully',
-      }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+      return jsonResponse({ success: true, message: 'Receipt confirmed successfully' });
     }
 
     if (!code) {
-      return new Response(JSON.stringify({
-        success: false,
-        error: 'Code is required',
-      }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 400,
-      });
+      return jsonResponse({ success: false, error: 'Code is required' });
     }
 
     // Find the redemption code
@@ -203,63 +222,50 @@ serve(async (req) => {
       `)
       .eq('code', code.toUpperCase())
       .eq('status', 'active')
-      .single();
+      .maybeSingle();
 
     console.log('Code lookup result:', { redemptionCode, codeError });
 
-    if (codeError || !redemptionCode) {
-      console.log('Code not found or error:', { codeError, redemptionCode });
-      return new Response(JSON.stringify({
-        success: false,
-        error: 'Invalid or expired redemption code',
-      }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 404,
-      });
+    if (codeError) {
+      console.error('Code lookup error:', codeError);
+      return jsonResponse({ success: false, error: 'Failed to look up redemption code' });
+    }
+
+    if (!redemptionCode) {
+      return jsonResponse({ success: false, error: 'Invalid or expired redemption code' });
     }
 
     if (action === 'view') {
       console.log('View action for code:', code);
-      console.log('Redemption code data:', redemptionCode);
-      // Return order details for viewing
-      return new Response(JSON.stringify({
+      return jsonResponse({
         success: true,
         order: redemptionCode.orders,
         shop: redemptionCode.shops,
         code: redemptionCode.code,
-      }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
     if (action === 'confirm_delivery') {
-      // Shop owner confirming delivery
       const authHeader = req.headers.get('Authorization');
       if (!authHeader) {
-        return new Response(JSON.stringify({
-          success: false,
-          error: 'Authentication required',
-        }), {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          status: 401,
-        });
+        return jsonResponse({ success: false, error: 'Authentication required' });
       }
 
-      // Verify the user is the shop owner
       const token = authHeader.replace('Bearer ', '');
       const { data: { user }, error: authError } = await supabase.auth.getUser(token);
 
-      if (authError || !user || user.id !== redemptionCode.shops.owner_id) {
-        return new Response(JSON.stringify({
-          success: false,
-          error: 'Unauthorized to confirm delivery for this order',
-        }), {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          status: 403,
-        });
+      if (authError || !user) {
+        return jsonResponse({ success: false, error: 'Authentication failed' });
       }
 
-      // Mark code as redeemed
+      if (!redemptionCode.shops || user.id !== redemptionCode.shops.owner_id) {
+        return jsonResponse({ success: false, error: 'Unauthorized to confirm delivery for this order' });
+      }
+
+      if (!redemptionCode.orders) {
+        return jsonResponse({ success: false, error: 'Order not found for this code' });
+      }
+
       await supabase
         .from('redemption_codes')
         .update({
@@ -269,7 +275,6 @@ serve(async (req) => {
         })
         .eq('id', redemptionCode.id);
 
-      // Update order status
       await supabase
         .from('orders')
         .update({
@@ -278,17 +283,14 @@ serve(async (req) => {
         })
         .eq('id', redemptionCode.orders.id);
 
-      return new Response(JSON.stringify({
-        success: true,
-        message: 'Delivery confirmed successfully',
-      }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+      return jsonResponse({ success: true, message: 'Delivery confirmed successfully' });
     }
 
     if (action === 'confirm_receipt') {
-      // Customer confirming receipt
-      // Mark code as redeemed and credit seller
+      if (!redemptionCode.orders) {
+        return jsonResponse({ success: false, error: 'Order not found for this code' });
+      }
+
       await supabase
         .from('redemption_codes')
         .update({
@@ -297,7 +299,6 @@ serve(async (req) => {
         })
         .eq('id', redemptionCode.id);
 
-      // Update order
       await supabase
         .from('orders')
         .update({
@@ -307,18 +308,26 @@ serve(async (req) => {
         .eq('id', redemptionCode.orders.id);
 
       // Get payment and credit seller if not already credited
-      const { data: payment } = await supabase
+      const { data: payment, error: paymentError } = await supabase
         .from('payments')
         .select('*')
         .eq('order_id', redemptionCode.orders.id)
-        .single();
+        .maybeSingle();
+
+      if (paymentError) {
+        console.error('Error fetching payment for code confirm_receipt:', paymentError);
+      }
 
       if (payment && !payment.credited_to_seller) {
-        const { data: wallet } = await supabase
+        const { data: wallet, error: walletError } = await supabase
           .from('seller_wallets')
           .select('*')
           .eq('shop_id', redemptionCode.shop_id)
-          .single();
+          .maybeSingle();
+
+        if (walletError) {
+          console.error('Error fetching wallet for code confirm_receipt:', walletError);
+        }
 
         if (wallet) {
           await supabase
@@ -328,42 +337,34 @@ serve(async (req) => {
               total_earned: wallet.total_earned + payment.seller_amount,
             })
             .eq('id', wallet.id);
-
+        } else {
+          // Create wallet if it doesn't exist
           await supabase
-            .from('payments')
-            .update({
-              credited_to_seller: true,
-              credited_at: new Date().toISOString(),
-            })
-            .eq('id', payment.id);
+            .from('seller_wallets')
+            .insert({
+              shop_id: redemptionCode.shop_id,
+              balance: payment.seller_amount,
+              total_earned: payment.seller_amount,
+            });
         }
+
+        await supabase
+          .from('payments')
+          .update({
+            credited_to_seller: true,
+            credited_at: new Date().toISOString(),
+          })
+          .eq('id', payment.id);
       }
 
-      return new Response(JSON.stringify({
-        success: true,
-        message: 'Receipt confirmed successfully',
-      }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+      return jsonResponse({ success: true, message: 'Receipt confirmed successfully' });
     }
 
-    return new Response(JSON.stringify({
-      success: false,
-      error: 'Invalid action',
-    }), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      status: 400,
-    });
+    return jsonResponse({ success: false, error: 'Invalid action' });
 
   } catch (error: any) {
     console.error('Error in redeem-code function:', error);
     console.error('Request details:', { code, action, orderId });
-    return new Response(JSON.stringify({
-      success: false,
-      error: error.message
-    }), {
-      status: 500,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
+    return jsonResponse({ success: false, error: error.message || 'Internal server error' });
   }
 });

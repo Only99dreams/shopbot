@@ -25,7 +25,7 @@ const registerSchema = z.object({
 const benefits = [
   "Set up your shop in 5 minutes",
   "AI handles customer questions 24/7",
-  "Accept payments via Paystack & Flutterwave",
+  "Accept payments via Flutterwave",
   "Track sales and analytics in real-time",
 ];
 

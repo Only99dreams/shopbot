@@ -61,25 +61,38 @@ export function RedemptionCodeModal({ trigger, mode = 'view', onSuccess }: Redem
         body: { code, action },
       });
 
-      if (error) throw error;
+      if (error) {
+        // Try to extract the real error from the response body
+        let message = 'Failed to process code';
+        try {
+          if (error.context && typeof error.context.json === 'function') {
+            const body = await error.context.json();
+            message = body?.error || error.message || message;
+          } else {
+            message = error.message || message;
+          }
+        } catch {
+          message = error.message || message;
+        }
+        throw new Error(message);
+      }
+      if (!data?.success) {
+        throw new Error(data?.error || 'Failed to process code');
+      }
       return data;
     },
     onSuccess: (data) => {
-      if (data.success) {
-        if (data.order) {
-          setOrderDetails(data.order);
-          setShopDetails(data.shop);
-          setStep('details');
-        } else {
-          toast.success(data.message);
-          onSuccess?.();
-          setStep('input');
-          setCode('');
-          setOrderDetails(null);
-          setShopDetails(null);
-        }
+      if (data.order) {
+        setOrderDetails(data.order);
+        setShopDetails(data.shop);
+        setStep('details');
       } else {
-        toast.error(data.error || 'Failed to process code');
+        toast.success(data.message);
+        onSuccess?.();
+        setStep('input');
+        setCode('');
+        setOrderDetails(null);
+        setShopDetails(null);
       }
     },
     onError: (error: any) => {

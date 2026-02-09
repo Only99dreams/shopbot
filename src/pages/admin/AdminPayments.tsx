@@ -47,7 +47,7 @@ export default function AdminPayments() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('payout_requests')
-        .select('*, shops(name, bank_name, account_number, account_name)')
+        .select('*, shops(id, owner_id, name, bank_name, account_number, account_name)')
         .order('created_at', { ascending: false });
       
       if (error) throw error;
@@ -91,20 +91,41 @@ export default function AdminPayments() {
 
       // If approved, deduct from wallet
       if (status === 'approved' && selectedPayout) {
-        const { data: wallet } = await supabase
-          .from('seller_wallets')
-          .select('*')
-          .eq('shop_id', selectedPayout.shop_id)
-          .single();
+        if (selectedPayout.payout_type === 'referral') {
+          const ownerId = selectedPayout.shops?.owner_id;
+          if (ownerId) {
+            const { data: code } = await supabase
+              .from('referral_codes')
+              .select('id, available_balance, total_withdrawn')
+              .eq('user_id', ownerId)
+              .maybeSingle();
 
-        if (wallet) {
-          await supabase
+            if (code) {
+              await supabase
+                .from('referral_codes')
+                .update({
+                  available_balance: Number(code.available_balance || 0) - selectedPayout.amount,
+                  total_withdrawn: Number(code.total_withdrawn || 0) + selectedPayout.amount,
+                })
+                .eq('id', code.id);
+            }
+          }
+        } else {
+          const { data: wallet } = await supabase
             .from('seller_wallets')
-            .update({
-              balance: wallet.balance - selectedPayout.amount,
-              total_withdrawn: wallet.total_withdrawn + selectedPayout.amount,
-            })
-            .eq('id', wallet.id);
+            .select('*')
+            .eq('shop_id', selectedPayout.shop_id)
+            .single();
+
+          if (wallet) {
+            await supabase
+              .from('seller_wallets')
+              .update({
+                balance: wallet.balance - selectedPayout.amount,
+                total_withdrawn: wallet.total_withdrawn + selectedPayout.amount,
+              })
+              .eq('id', wallet.id);
+          }
         }
       }
     },
@@ -277,6 +298,7 @@ export default function AdminPayments() {
                   <TableHeader>
                     <TableRow>
                       <TableHead>Shop</TableHead>
+                      <TableHead>Type</TableHead>
                       <TableHead>Amount</TableHead>
                       <TableHead>Bank Details</TableHead>
                       <TableHead>Status</TableHead>
@@ -287,13 +309,14 @@ export default function AdminPayments() {
                   <TableBody>
                     {payoutRequests?.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                        <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
                           No payout requests
                         </TableCell>
                       </TableRow>
                     ) : payoutRequests?.map((payout: any) => (
                       <TableRow key={payout.id}>
                         <TableCell className="font-medium">{payout.shops?.name || 'Unknown'}</TableCell>
+                        <TableCell>{payout.payout_type === 'referral' ? 'Referral' : 'Sales'}</TableCell>
                         <TableCell>₦{Number(payout.amount).toLocaleString()}</TableCell>
                         <TableCell className="text-sm">
                           <div>{payout.bank_name || payout.shops?.bank_name || 'N/A'}</div>

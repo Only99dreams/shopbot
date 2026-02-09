@@ -1,4 +1,4 @@
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { 
   LayoutDashboard, 
   Package, 
@@ -15,7 +15,9 @@ import {
   FolderOpen,
   Shield,
   Menu,
-  X
+  X,
+  AlertTriangle,
+  Lock
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/ThemeToggle";
@@ -25,17 +27,20 @@ import { useAuth } from "@/hooks/useAuth";
 import { useShop } from "@/hooks/useShop";
 
 const menuItems = [
-  { icon: LayoutDashboard, label: "Dashboard", href: "/dashboard" },
-  { icon: Package, label: "Products", href: "/dashboard/products" },
-  { icon: FolderOpen, label: "Categories", href: "/dashboard/categories" },
-  { icon: ShoppingCart, label: "Orders", href: "/dashboard/orders" },
-  { icon: Users, label: "Customers", href: "/dashboard/customers" },
-  { icon: BarChart3, label: "Analytics", href: "/dashboard/analytics" },
-  { icon: MessageSquare, label: "Messages", href: "/dashboard/messages" },
-  { icon: Share2, label: "Referrals", href: "/dashboard/referrals" },
-  { icon: CreditCard, label: "Subscription", href: "/dashboard/subscription" },
-  { icon: Settings, label: "Settings", href: "/dashboard/settings" },
+  { icon: LayoutDashboard, label: "Dashboard", href: "/dashboard", requiresSub: false },
+  { icon: Package, label: "Products", href: "/dashboard/products", requiresSub: true },
+  { icon: FolderOpen, label: "Categories", href: "/dashboard/categories", requiresSub: true },
+  { icon: ShoppingCart, label: "Orders", href: "/dashboard/orders", requiresSub: true },
+  { icon: Users, label: "Customers", href: "/dashboard/customers", requiresSub: true },
+  { icon: BarChart3, label: "Analytics", href: "/dashboard/analytics", requiresSub: true },
+  { icon: MessageSquare, label: "Messages", href: "/dashboard/messages", requiresSub: true },
+  { icon: Share2, label: "Referrals", href: "/dashboard/referrals", requiresSub: true },
+  { icon: CreditCard, label: "Subscription", href: "/dashboard/subscription", requiresSub: false },
+  { icon: Settings, label: "Settings", href: "/dashboard/settings", requiresSub: false },
 ];
+
+// Routes accessible without an active subscription
+const FREE_ROUTES = ["/dashboard", "/dashboard/subscription", "/dashboard/settings"];
 
 interface DashboardLayoutProps {
   children: React.ReactNode;
@@ -43,10 +48,15 @@ interface DashboardLayoutProps {
 
 export function DashboardLayout({ children }: DashboardLayoutProps) {
   const location = useLocation();
+  const navigate = useNavigate();
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const { signOut, user, isAdmin } = useAuth();
-  const { shop } = useShop();
+  const { shop, subscription, loading } = useShop();
+
+  // Don't gate anything while still loading — assume active until we know otherwise
+  const isSubscriptionActive = loading || subscription?.status === 'active';
+  const isRestrictedRoute = !FREE_ROUTES.includes(location.pathname);
 
   // Close mobile menu on route change
   useEffect(() => {
@@ -127,19 +137,33 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
           <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
             {menuItems.map((item) => {
               const isActive = location.pathname === item.href;
+              const isLocked = item.requiresSub && !isSubscriptionActive;
               return (
                 <Link
                   key={item.href}
-                  to={item.href}
+                  to={isLocked ? "#" : item.href}
+                  onClick={(e) => {
+                    if (isLocked) {
+                      e.preventDefault();
+                      navigate('/dashboard/subscription');
+                    }
+                  }}
                   className={cn(
                     "flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200",
-                    isActive
+                    isActive && !isLocked
                       ? "bg-primary text-primary-foreground"
-                      : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                      : isLocked
+                        ? "text-muted-foreground/50 cursor-not-allowed"
+                        : "text-muted-foreground hover:bg-muted hover:text-foreground"
                   )}
                 >
                   <item.icon className="h-5 w-5 flex-shrink-0" />
-                  {!collapsed && <span className="font-medium">{item.label}</span>}
+                  {!collapsed && (
+                    <span className="font-medium flex-1">{item.label}</span>
+                  )}
+                  {!collapsed && isLocked && (
+                    <Lock className="h-3.5 w-3.5 flex-shrink-0" />
+                  )}
                 </Link>
               );
             })}
@@ -196,7 +220,45 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
           collapsed ? "lg:ml-16" : "lg:ml-64"
         )}
       >
-        {children}
+        {/* Global Subscription Banner */}
+        {!isSubscriptionActive && (
+          <div className="bg-amber-500/10 border-b border-amber-500/20 px-4 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4 text-amber-600 flex-shrink-0" />
+              <p className="text-sm font-medium text-amber-600">
+                Your shop is currently <span className="font-bold">closed</span>. Subscribe to activate your shop and start selling.
+              </p>
+            </div>
+            <Button 
+              size="sm" 
+              className="w-full sm:w-auto flex-shrink-0"
+              onClick={() => navigate('/dashboard/subscription')}
+            >
+              Activate Now
+            </Button>
+          </div>
+        )}
+
+        {/* Block restricted pages when no active subscription */}
+        {!isSubscriptionActive && isRestrictedRoute ? (
+          <div className="flex items-center justify-center min-h-[60vh] p-6">
+            <div className="text-center max-w-md">
+              <div className="mx-auto h-16 w-16 rounded-full bg-amber-500/10 flex items-center justify-center mb-4">
+                <Lock className="h-8 w-8 text-amber-600" />
+              </div>
+              <h2 className="text-xl font-bold mb-2">Subscription Required</h2>
+              <p className="text-muted-foreground mb-6">
+                You need an active subscription to access this feature. Subscribe now to unlock your full shop and start selling.
+              </p>
+              <Button onClick={() => navigate('/dashboard/subscription')} className="w-full sm:w-auto">
+                <CreditCard className="h-4 w-4 mr-2" />
+                Subscribe Now
+              </Button>
+            </div>
+          </div>
+        ) : (
+          children
+        )}
       </main>
     </div>
   );

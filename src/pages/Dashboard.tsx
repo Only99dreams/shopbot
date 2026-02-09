@@ -115,15 +115,20 @@ export default function Dashboard() {
     <DashboardLayout>
       <div className="p-4 sm:p-6 lg:p-8">
         {/* Inactive Subscription Banner */}
-        {subscription?.status === 'inactive' && (
-          <div className="mb-4 sm:mb-6 bg-amber-500/10 border border-amber-500/20 rounded-xl p-3 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div>
-              <p className="font-medium text-amber-600">Subscription Required</p>
-              <p className="text-sm text-muted-foreground">
-                Pay ₦1,000/month to activate your shop and start selling
-              </p>
+        {subscription?.status !== 'active' && (
+          <div className="mb-4 sm:mb-6 bg-gradient-to-r from-amber-500/10 to-orange-500/10 border border-amber-500/20 rounded-xl p-4 sm:p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex items-start gap-3">
+              <div className="h-10 w-10 rounded-full bg-amber-500/20 flex items-center justify-center flex-shrink-0">
+                <TrendingUp className="h-5 w-5 text-amber-600" />
+              </div>
+              <div>
+                <p className="font-semibold text-amber-600 text-base">Activate Your Shop</p>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Your shop is currently closed. Subscribe to a plan to open your shop, accept orders, and start selling to customers.
+                </p>
+              </div>
             </div>
-            <Button size="sm" className="w-full sm:w-auto" onClick={() => navigate('/subscription')}>
+            <Button size="default" className="w-full sm:w-auto flex-shrink-0" onClick={() => navigate('/dashboard/subscription')}>
               Activate Now
             </Button>
           </div>

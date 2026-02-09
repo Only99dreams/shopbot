@@ -6,10 +6,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
+import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Store, User, Bell, Lock, Upload, Loader2, ExternalLink, Share2, MapPin } from "lucide-react";
+import { Store, User, Bell, Lock, Upload, Loader2, ExternalLink, Share2, MapPin, CreditCard, Wallet } from "lucide-react";
 import { useShop } from "@/hooks/useShop";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
@@ -39,6 +40,9 @@ export default function Settings() {
     state: "",
     city: "",
     address: "",
+    bank_name: "",
+    account_number: "",
+    account_name: "",
   });
 
   const [profileData, setProfileData] = useState({
@@ -54,6 +58,13 @@ export default function Settings() {
     marketingEmails: false,
   });
 
+  const [walletBalance, setWalletBalance] = useState(0);
+  const [referralBalance, setReferralBalance] = useState(0);
+  const [payoutRequests, setPayoutRequests] = useState<any[]>([]);
+  const [payoutAmount, setPayoutAmount] = useState(0);
+  const [payoutType, setPayoutType] = useState<'sales' | 'referral'>('sales');
+  const [loadingPayments, setLoadingPayments] = useState(false);
+
   useEffect(() => {
     if (shop) {
       setShopData({
@@ -63,6 +74,9 @@ export default function Settings() {
         state: shop.state || "",
         city: shop.city || "",
         address: shop.address || "",
+        bank_name: shop.bank_name || "",
+        account_number: shop.account_number || "",
+        account_name: shop.account_name || "",
       });
     }
   }, [shop]);
@@ -72,6 +86,12 @@ export default function Settings() {
       fetchProfile();
     }
   }, [user]);
+
+  useEffect(() => {
+    if (shop?.id && user?.id) {
+      fetchPaymentsData();
+    }
+  }, [shop?.id, user?.id]);
 
   const fetchProfile = async () => {
     if (!user?.id) return;
@@ -88,6 +108,80 @@ export default function Settings() {
         phone: data.phone || "",
       });
     }
+  };
+
+  const fetchPaymentsData = async () => {
+    if (!shop?.id || !user?.id) return;
+    setLoadingPayments(true);
+    try {
+      const [{ data: wallet }, { data: referralCode }, { data: requests }] = await Promise.all([
+        supabase.from('seller_wallets').select('balance').eq('shop_id', shop.id).maybeSingle(),
+        supabase.from('referral_codes').select('available_balance').eq('user_id', user.id).maybeSingle(),
+        supabase.from('payout_requests').select('*').eq('shop_id', shop.id).order('created_at', { ascending: false }),
+      ]);
+
+      setWalletBalance(Number(wallet?.balance || 0));
+      setReferralBalance(Number(referralCode?.available_balance || 0));
+      setPayoutRequests(requests || []);
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: 'Failed to load payment data.',
+        variant: 'destructive',
+      });
+    } finally {
+      setLoadingPayments(false);
+    }
+  };
+
+  const handlePayoutRequest = async () => {
+    if (!shop?.id) return;
+    if (!shopData.bank_name || !shopData.account_number || !shopData.account_name) {
+      toast({
+        title: 'Bank details required',
+        description: 'Please add your bank details before requesting a withdrawal.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    const available = payoutType === 'sales' ? walletBalance : referralBalance;
+    if (!payoutAmount || payoutAmount <= 0 || payoutAmount > available) {
+      toast({
+        title: 'Invalid amount',
+        description: 'Enter an amount within your available balance.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    const { error } = await supabase
+      .from('payout_requests')
+      .insert({
+        shop_id: shop.id,
+        amount: payoutAmount,
+        payout_type: payoutType,
+        bank_name: shopData.bank_name,
+        account_number: shopData.account_number,
+        account_name: shopData.account_name,
+      });
+
+    if (error) {
+      toast({
+        title: 'Error',
+        description: 'Failed to submit payout request. Please try again.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    toast({
+      title: 'Request sent',
+      description: 'Your payout request has been submitted for review.',
+    });
+
+    setPayoutAmount(0);
+    await fetchPaymentsData();
   };
 
   const handleShopUpdate = async () => {
@@ -189,7 +283,7 @@ export default function Settings() {
         </div>
 
         <Tabs defaultValue="shop" className="space-y-6">
-          <TabsList className="grid w-full max-w-lg grid-cols-5 h-auto">
+          <TabsList className="grid w-full max-w-2xl grid-cols-6 h-auto">
             <TabsTrigger value="shop" className="gap-1 sm:gap-2 text-xs sm:text-sm px-2 py-2">
               <Store className="h-4 w-4 hidden sm:block" />
               Shop
@@ -209,6 +303,10 @@ export default function Settings() {
             <TabsTrigger value="security" className="gap-1 sm:gap-2 text-xs sm:text-sm px-2 py-2">
               <Lock className="h-4 w-4 hidden sm:block" />
               Security
+            </TabsTrigger>
+            <TabsTrigger value="payments" className="gap-1 sm:gap-2 text-xs sm:text-sm px-2 py-2">
+              <Wallet className="h-4 w-4 hidden sm:block" />
+              Payments
             </TabsTrigger>
           </TabsList>
 
@@ -481,6 +579,138 @@ export default function Settings() {
                   Once you delete your account, there is no going back. Please be certain.
                 </p>
                 <Button variant="destructive">Delete Account</Button>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Payments & Withdrawals */}
+          <TabsContent value="payments" className="space-y-6">
+            <Card className="shadow-card">
+              <CardHeader>
+                <CardTitle>Bank Details</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="space-y-2">
+                    <Label>Bank Name</Label>
+                    <Input
+                      value={shopData.bank_name}
+                      onChange={(e) => setShopData((p) => ({ ...p, bank_name: e.target.value }))}
+                      placeholder="e.g. GTBank"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Account Number</Label>
+                    <Input
+                      value={shopData.account_number}
+                      onChange={(e) => setShopData((p) => ({ ...p, account_number: e.target.value }))}
+                      placeholder="0123456789"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Account Name</Label>
+                    <Input
+                      value={shopData.account_name}
+                      onChange={(e) => setShopData((p) => ({ ...p, account_name: e.target.value }))}
+                      placeholder="Account holder"
+                    />
+                  </div>
+                </div>
+                <Button onClick={handleShopUpdate} disabled={loading}>
+                  {loading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                  Save Bank Details
+                </Button>
+              </CardContent>
+            </Card>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <Card className="shadow-card">
+                <CardHeader>
+                  <CardTitle>Business Wallet</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-3xl font-bold">₦{walletBalance.toLocaleString()}</div>
+                  <p className="text-sm text-muted-foreground">Available for withdrawal</p>
+                </CardContent>
+              </Card>
+              <Card className="shadow-card">
+                <CardHeader>
+                  <CardTitle>Referral Wallet</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-3xl font-bold">₦{referralBalance.toLocaleString()}</div>
+                  <p className="text-sm text-muted-foreground">Available for withdrawal</p>
+                </CardContent>
+              </Card>
+            </div>
+
+            <Card className="shadow-card">
+              <CardHeader>
+                <CardTitle>Request Withdrawal</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="space-y-2">
+                    <Label>Wallet Type</Label>
+                    <Select value={payoutType} onValueChange={(v) => setPayoutType(v as 'sales' | 'referral')}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select wallet" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="sales">Business Wallet</SelectItem>
+                        <SelectItem value="referral">Referral Wallet</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Amount (₦)</Label>
+                    <Input
+                      type="number"
+                      value={payoutAmount || ''}
+                      onChange={(e) => setPayoutAmount(Number(e.target.value))}
+                      placeholder="Enter amount"
+                    />
+                  </div>
+                  <div className="flex items-end">
+                    <Button onClick={handlePayoutRequest} disabled={loadingPayments} className="w-full">
+                      {loadingPayments ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                      Submit Request
+                    </Button>
+                  </div>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  Requests are reviewed by admin. Approved payouts will be processed to your bank account.
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card className="shadow-card">
+              <CardHeader>
+                <CardTitle>Withdrawal History</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {loadingPayments ? (
+                  <div className="text-muted-foreground">Loading...</div>
+                ) : payoutRequests.length === 0 ? (
+                  <div className="text-muted-foreground">No payout requests yet.</div>
+                ) : (
+                  <div className="space-y-3">
+                    {payoutRequests.map((req) => (
+                      <div key={req.id} className="flex items-center justify-between rounded-lg border p-4">
+                        <div>
+                          <p className="font-medium">{req.payout_type === 'referral' ? 'Referral Wallet' : 'Business Wallet'}</p>
+                          <p className="text-sm text-muted-foreground">{new Date(req.created_at).toLocaleDateString()}</p>
+                        </div>
+                        <div className="text-right">
+                          <p className="font-semibold">₦{Number(req.amount).toLocaleString()}</p>
+                          <Badge variant={req.status === 'approved' ? 'default' : req.status === 'rejected' ? 'destructive' : 'secondary'}>
+                            {req.status}
+                          </Badge>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </CardContent>
             </Card>
           </TabsContent>

@@ -131,15 +131,14 @@ export default function Marketplace() {
   const { data: shops, isLoading: shopsLoading, refetch: refetchShops } = useQuery({
     queryKey: ['marketplace-shops', selectedState, selectedCity],
     queryFn: async () => {
-      // First get all shops with their subscription status
+      // Fetch all shops with their subscription status
       let query = supabase
         .from('shops')
         .select(`
           *,
           subscriptions(status),
           products(count)
-        `)
-        .eq('is_active', true);
+        `);
 
       // Apply state filter if a specific state is selected
       if (selectedState && selectedState !== 'All States') {
@@ -158,16 +157,14 @@ export default function Marketplace() {
         throw error;
       }
       
-      // Filter shops that are active and have active subscription
+      // Filter shops: show if is_active OR has active subscription
       const filteredShops = (data || []).filter(shop => {
-        const isActive = shop.is_active !== false;
         const subscription = Array.isArray(shop.subscriptions)
           ? shop.subscriptions[0]
           : shop.subscriptions;
-        const status = subscription?.status;
-        const hasValidSubscription = !subscription || status === 'active';
-
-        return isActive && hasValidSubscription;
+        const hasActiveSubscription = subscription?.status === 'active';
+        const isActive = shop.is_active === true;
+        return isActive || hasActiveSubscription;
       });
       
       return filteredShops.map(shop => ({
@@ -206,22 +203,18 @@ export default function Marketplace() {
         throw error;
       }
       
-      // Filter products from active shops with valid subscriptions
+      // Filter products from active shops (is_active OR has active subscription)
       const filteredProducts = (data || []).filter(product => {
         const shop = product.shops;
-        if (!shop || shop.is_active === false) {
-          return false;
-        }
+        if (!shop) return false;
 
         const subscription = Array.isArray(shop.subscriptions)
           ? shop.subscriptions[0]
           : shop.subscriptions;
-        const status = subscription?.status;
-        const hasValidSubscription = !subscription || status === 'active';
-
-        if (!hasValidSubscription) {
-          return false;
-        }
+        const hasActiveSubscription = subscription?.status === 'active';
+        const isActive = shop.is_active === true;
+        
+        if (!isActive && !hasActiveSubscription) return false;
         
         // Apply location filters
         if (selectedState && selectedState !== 'All States' && shop.state !== selectedState) {
@@ -247,12 +240,25 @@ export default function Marketplace() {
         body: { code: 'DIRECT_CONFIRM', action: 'confirm_receipt', orderId },
       });
 
-      if (error) throw error;
+      if (error) {
+        let message = 'Failed to confirm receipt';
+        try {
+          if (error.context && typeof error.context.json === 'function') {
+            const body = await error.context.json();
+            message = body?.error || error.message || message;
+          } else {
+            message = error.message || message;
+          }
+        } catch {
+          message = error.message || message;
+        }
+        throw new Error(message);
+      }
+      if (!data?.success) throw new Error(data?.error || 'Failed to confirm receipt');
       return data;
     },
     onSuccess: () => {
       toast.success('Receipt confirmed! Seller has been credited.');
-      // Update the tracked order to reflect confirmation
       setTrackedOrder(prev => prev ? { ...prev, redemption_confirmed: true } : null);
     },
     onError: (error: Error) => {

@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { useParams, useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { CartProvider, useCart } from '@/hooks/useCart';
@@ -8,12 +8,10 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Badge } from '@/components/ui/badge';
-import { ChevronLeft, Trash2, CreditCard, Loader2, Building2, ShoppingBag, Shield, Lock, Minus, Plus } from 'lucide-react';
+import { ChevronLeft, Trash2, CreditCard, Loader2, ShoppingBag, Shield, Lock, Minus, Plus, CheckCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { z } from 'zod';
-import { BankTransferModal } from '@/components/storefront/BankTransferModal';
 import { cn } from '@/lib/utils';
 
 const checkoutSchema = z.object({
@@ -27,6 +25,7 @@ const checkoutSchema = z.object({
 function CheckoutContent() {
   const { shopId } = useParams<{ shopId: string }>();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { items, getTotal, clearCart, removeItem } = useCart();
   const [formData, setFormData] = useState({
     name: '',
@@ -36,12 +35,8 @@ function CheckoutContent() {
     notes: ''
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const [paymentMethod, setPaymentMethod] = useState<'paystack' | 'bank_transfer'>('bank_transfer');
   const [isProcessing, setIsProcessing] = useState(false);
-  const [bankTransferOrder, setBankTransferOrder] = useState<{
-    orderId: string;
-    orderNumber: string;
-  } | null>(null);
+  const [paymentSuccess, setPaymentSuccess] = useState(false);
 
   const { data: shop } = useQuery({
     queryKey: ['shop', shopId],
@@ -74,8 +69,8 @@ function CheckoutContent() {
     enabled: !!shopId
   });
 
-  // Check if subscription is active
-  const isSubscriptionActive = subscription?.status === 'active';
+  // Check if subscription is active OR shop is_active (legacy support)
+  const isSubscriptionActive = subscription?.status === 'active' || shop?.is_active === true;
 
   const createOrder = useMutation({
     mutationFn: async () => {
@@ -108,7 +103,7 @@ function CheckoutContent() {
           notes: `${formData.address}${formData.notes ? `\n\nNotes: ${formData.notes}` : ''}`,
           status: 'pending',
           payment_status: 'unpaid',
-          payment_method: paymentMethod
+          payment_method: 'flutterwave'
         })
         .select()
         .single();
@@ -135,11 +130,11 @@ function CheckoutContent() {
     }
   });
 
-  const handlePaystackCheckout = async (orderId: string) => {
+  const handleFlutterwaveCheckout = async (orderId: string) => {
     try {
-      const callbackUrl = `${window.location.origin}/shop/${shopId}?payment=success`;
+      const callbackUrl = `${window.location.origin}/shop/${shopId}/checkout`;
       
-      const { data, error } = await supabase.functions.invoke('paystack-initialize', {
+      const { data, error } = await supabase.functions.invoke('flutterwave-initialize', {
         body: {
           orderId,
           email: formData.email || `${formData.phone}@customer.shopnaija.com`,
@@ -150,22 +145,17 @@ function CheckoutContent() {
 
       if (error) throw error;
 
-      if (data.success && data.authorization_url) {
-        // Redirect to Paystack
-        window.location.href = data.authorization_url;
+      if (data.success && data.payment_link) {
+        // Redirect to Flutterwave
+        window.location.href = data.payment_link;
       } else {
         throw new Error(data.error || 'Failed to initialize payment');
       }
     } catch (error: any) {
-      console.error('Paystack error:', error);
+      console.error('Flutterwave error:', error);
       toast.error('Payment initialization failed. Please try again.');
       setIsProcessing(false);
     }
-  };
-
-  const handleBankTransferCheckout = async (orderId: string, orderNumber: string) => {
-    setBankTransferOrder({ orderId, orderNumber });
-    setIsProcessing(false);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -177,12 +167,7 @@ function CheckoutContent() {
       setIsProcessing(true);
 
       const result = await createOrder.mutateAsync();
-
-      if (paymentMethod === 'paystack') {
-        await handlePaystackCheckout(result.order.id);
-      } else if (paymentMethod === 'bank_transfer') {
-        await handleBankTransferCheckout(result.order.id, result.orderNumber);
-      }
+      await handleFlutterwaveCheckout(result.order.id);
     } catch (error) {
       if (error instanceof z.ZodError) {
         const newErrors: Record<string, string> = {};
@@ -200,11 +185,52 @@ function CheckoutContent() {
     }
   };
 
-  const handleBankTransferComplete = () => {
-    clearCart();
-    setBankTransferOrder(null);
-    navigate(`/shop/${shopId}`);
-  };
+  // Handle Flutterwave payment callback
+  useEffect(() => {
+    const transactionId = searchParams.get('transaction_id');
+    const txRef = searchParams.get('tx_ref');
+    const status = searchParams.get('status');
+
+    if (transactionId && txRef && status === 'successful') {
+      setIsProcessing(true);
+      supabase.functions.invoke('flutterwave-verify', {
+        body: { transactionId, txRef },
+      }).then(({ data, error }) => {
+        if (error || !data?.success) {
+          toast.error('Payment verification failed. Please contact support.');
+        } else {
+          setPaymentSuccess(true);
+          toast.success('Payment successful! Your order has been confirmed.');
+          clearCart();
+        }
+        setIsProcessing(false);
+        setSearchParams({});
+      });
+    } else if (status === 'cancelled') {
+      toast.error('Payment was cancelled.');
+      setSearchParams({});
+    }
+  }, [searchParams, setSearchParams, clearCart]);
+
+  // Payment success screen
+  if (paymentSuccess) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-b from-muted/30 to-background">
+        <div className="text-center max-w-md px-4">
+          <div className="h-24 w-24 mx-auto mb-6 rounded-full bg-green-500/10 flex items-center justify-center">
+            <CheckCircle className="h-12 w-12 text-green-500" />
+          </div>
+          <h1 className="text-2xl font-bold mb-2">Payment Successful!</h1>
+          <p className="text-muted-foreground mb-6">
+            Your order has been confirmed. You'll receive a redemption code to confirm delivery.
+          </p>
+          <Link to={`/shop/${shopId}`}>
+            <Button size="lg" className="rounded-full px-8">Back to Shop</Button>
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
   // Check if subscription is active - prevent checkout for inactive shops
   if (!isSubscriptionActive) {
@@ -431,46 +457,17 @@ function CheckoutContent() {
                 {/* Payment Method */}
                 <div className="space-y-4 pt-4 border-t">
                   <h3 className="font-medium text-sm text-muted-foreground uppercase tracking-wide">Payment Method</h3>
-                  <RadioGroup value={paymentMethod} onValueChange={(v) => setPaymentMethod(v as 'paystack' | 'bank_transfer')}>
-                    <div className={cn(
-                      "flex items-center space-x-3 p-4 border-2 rounded-xl cursor-pointer transition-all",
-                      paymentMethod === 'bank_transfer' 
-                        ? "border-primary bg-primary/5" 
-                        : "border-transparent bg-muted/50 hover:bg-muted"
-                    )}>
-                      <RadioGroupItem value="bank_transfer" id="bank_transfer" />
-                      <Label htmlFor="bank_transfer" className="flex-1 cursor-pointer">
-                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center">
-                            <Building2 className="h-5 w-5 text-blue-600" />
-                          </div>
-                          <div>
-                            <p className="font-semibold">Bank Transfer</p>
-                            <p className="text-sm text-muted-foreground">Transfer & upload receipt</p>
-                          </div>
-                        </div>
-                      </Label>
+                  <div className="flex items-center space-x-3 p-4 border-2 border-primary bg-primary/5 rounded-xl">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center">
+                        <CreditCard className="h-5 w-5 text-green-600" />
+                      </div>
+                      <div>
+                        <p className="font-semibold">Pay with Flutterwave</p>
+                        <p className="text-sm text-muted-foreground">Cards, Bank Transfer, Mobile Money & more</p>
+                      </div>
                     </div>
-                    <div className={cn(
-                      "flex items-center space-x-3 p-4 border-2 rounded-xl cursor-pointer transition-all",
-                      paymentMethod === 'paystack' 
-                        ? "border-primary bg-primary/5" 
-                        : "border-transparent bg-muted/50 hover:bg-muted"
-                    )}>
-                      <RadioGroupItem value="paystack" id="paystack" />
-                      <Label htmlFor="paystack" className="flex-1 cursor-pointer">
-                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center">
-                            <CreditCard className="h-5 w-5 text-green-600" />
-                          </div>
-                          <div>
-                            <p className="font-semibold">Pay with Card</p>
-                            <p className="text-sm text-muted-foreground">Secure payment via Paystack</p>
-                          </div>
-                        </div>
-                      </Label>
-                    </div>
-                  </RadioGroup>
+                  </div>
                 </div>
 
                 {/* Security Badge */}
@@ -491,15 +488,10 @@ function CheckoutContent() {
                       <Loader2 className="mr-2 h-5 w-5 animate-spin" />
                       Processing...
                     </>
-                  ) : paymentMethod === 'paystack' ? (
+                  ) : (
                     <>
                       <CreditCard className="mr-2 h-5 w-5" />
                       Pay ₦{getTotal().toLocaleString()}
-                    </>
-                  ) : (
-                    <>
-                      <Building2 className="mr-2 h-5 w-5" />
-                      Place Order - ₦{getTotal().toLocaleString()}
                     </>
                   )}
                 </Button>
@@ -517,25 +509,6 @@ function CheckoutContent() {
           </p>
         </div>
       </footer>
-
-      {/* Bank Transfer Modal */}
-      {bankTransferOrder && shopId && shop && (
-        <BankTransferModal
-          open={!!bankTransferOrder}
-          onOpenChange={(open) => {
-            if (!open) {
-              handleBankTransferComplete();
-            }
-          }}
-          orderId={bankTransferOrder.orderId}
-          orderNumber={bankTransferOrder.orderNumber}
-          shopId={shopId}
-          shopName={shop.name}
-          amount={getTotal()}
-          customerName={formData.name}
-          customerPhone={formData.phone}
-        />
-      )}
     </div>
   );
 }

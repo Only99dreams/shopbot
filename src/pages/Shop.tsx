@@ -38,13 +38,12 @@ function ShopContent() {
   const [ratingValue, setRatingValue] = useState<number>(5);
   const [ratingReview, setRatingReview] = useState<string>('');
 
-  // Check for payment success
+  // Check for payment success (Flutterwave callback legacy support)
   useEffect(() => {
     const paymentSuccess = searchParams.get('payment') === 'success';
-    const reference = searchParams.get('reference');
+    const txRef = searchParams.get('tx_ref');
 
-    if (paymentSuccess && reference) {
-      // Fetch the redemption code for this payment
+    if (paymentSuccess && txRef) {
       const fetchRedemptionCode = async () => {
         try {
           const { data: payment } = await supabase
@@ -55,13 +54,12 @@ function ShopContent() {
                 redemption_codes (code)
               )
             `)
-            .eq('paystack_reference', reference)
+            .eq('paystack_reference', txRef)
             .single();
 
           if (payment?.orders?.redemption_codes?.[0]?.code) {
             setRedemptionCode(payment.orders.redemption_codes[0].code);
             setShowPaymentSuccess(true);
-            // Clean up URL
             setSearchParams(new URLSearchParams());
           }
         } catch (error) {
@@ -203,7 +201,21 @@ function ShopContent() {
         body: { code: 'DIRECT_CONFIRM', action: 'confirm_receipt', orderId },
       });
 
-      if (error) throw error;
+      if (error) {
+        let message = 'Failed to confirm receipt';
+        try {
+          if (error.context && typeof error.context.json === 'function') {
+            const body = await error.context.json();
+            message = body?.error || error.message || message;
+          } else {
+            message = error.message || message;
+          }
+        } catch {
+          message = error.message || message;
+        }
+        throw new Error(message);
+      }
+      if (!data?.success) throw new Error(data?.error || 'Failed to confirm receipt');
       return data;
     },
     onSuccess: () => {
@@ -268,8 +280,8 @@ function ShopContent() {
     );
   }
 
-  // Check if subscription is active
-  const isSubscriptionActive = subscription?.status === 'active';
+  // Check if subscription is active OR shop is_active (legacy support)
+  const isSubscriptionActive = subscription?.status === 'active' || shop?.is_active === true;
 
   if (!isSubscriptionActive) {
     return (

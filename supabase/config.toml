@@ -15,11 +15,14 @@ verify_jwt = false
 [functions.whatsapp-ai-chat]
 verify_jwt = false
 
-[functions.paystack-initialize]
+[functions.flutterwave-initialize]
 verify_jwt = false
 
-[functions.paystack-webhook]
+[functions.flutterwave-webhook]
 verify_jwt = false
 
-[functions.paystack-verify]
+[functions.flutterwave-verify]
+verify_jwt = false
+
+[functions.flutterwave-subscribe]
 verify_jwt = false
