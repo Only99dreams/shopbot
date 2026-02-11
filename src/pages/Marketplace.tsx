@@ -208,6 +208,11 @@ export default function Marketplace() {
         const shop = product.shops;
         if (!shop) return false;
 
+        // Filter out products with 0 or negative stock (if stock_quantity is set)
+        if (product.stock_quantity !== null && product.stock_quantity <= 0) {
+          return false;
+        }
+
         const subscription = Array.isArray(shop.subscriptions)
           ? shop.subscriptions[0]
           : shop.subscriptions;

@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
 
 export interface CartItem {
   id: string;
@@ -23,9 +23,19 @@ interface CartContextType {
 const CartContext = createContext<CartContextType | undefined>(undefined);
 
 const CART_STORAGE_KEY = 'shopnaija-cart';
+const CART_CLEARED_KEY = 'shopnaija-cart-cleared';
 
 export function CartProvider({ children }: { children: ReactNode }) {
   const [items, setItems] = useState<CartItem[]>(() => {
+    // Check if cart was recently cleared due to successful payment
+    // This prevents race condition where cart is read before useEffect clears it
+    const wasCleared = sessionStorage.getItem(CART_CLEARED_KEY);
+    if (wasCleared === 'true') {
+      // Clear the flag and return empty cart
+      sessionStorage.removeItem(CART_CLEARED_KEY);
+      localStorage.removeItem(CART_STORAGE_KEY);
+      return [];
+    }
     const stored = localStorage.getItem(CART_STORAGE_KEY);
     return stored ? JSON.parse(stored) : [];
   });
@@ -34,7 +44,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
     localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(items));
   }, [items]);
 
-  const addItem = (item: Omit<CartItem, 'quantity'>) => {
+  const addItem = useCallback((item: Omit<CartItem, 'quantity'>) => {
     setItems(prev => {
       // Check if item from different shop
       if (prev.length > 0 && prev[0].shopId !== item.shopId) {
@@ -50,13 +60,13 @@ export function CartProvider({ children }: { children: ReactNode }) {
       }
       return [...prev, { ...item, quantity: 1 }];
     });
-  };
+  }, []);
 
-  const removeItem = (id: string) => {
+  const removeItem = useCallback((id: string) => {
     setItems(prev => prev.filter(item => item.id !== id));
-  };
+  }, []);
 
-  const updateQuantity = (id: string, quantity: number) => {
+  const updateQuantity = useCallback((id: string, quantity: number) => {
     if (quantity <= 0) {
       removeItem(id);
       return;
@@ -64,23 +74,27 @@ export function CartProvider({ children }: { children: ReactNode }) {
     setItems(prev => prev.map(item => 
       item.id === id ? { ...item, quantity } : item
     ));
-  };
+  }, [removeItem]);
 
-  const clearCart = () => {
+  const clearCart = useCallback(() => {
     setItems([]);
-  };
+    // Immediately clear localStorage to prevent stale cart on remount
+    localStorage.removeItem(CART_STORAGE_KEY);
+    // Set a flag so next CartProvider mount starts with empty cart
+    sessionStorage.setItem(CART_CLEARED_KEY, 'true');
+  }, []);
 
-  const getTotal = () => {
+  const getTotal = useCallback(() => {
     return items.reduce((total, item) => total + item.price * item.quantity, 0);
-  };
+  }, [items]);
 
-  const getItemCount = () => {
+  const getItemCount = useCallback(() => {
     return items.reduce((count, item) => count + item.quantity, 0);
-  };
+  }, [items]);
 
-  const getShopId = () => {
+  const getShopId = useCallback(() => {
     return items.length > 0 ? items[0].shopId : null;
-  };
+  }, [items]);
 
   return (
     <CartContext.Provider value={{

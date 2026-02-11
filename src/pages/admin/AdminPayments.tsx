@@ -13,7 +13,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { CreditCard, DollarSign, TrendingUp, Clock, Check, X, Receipt, Eye } from 'lucide-react';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
-import { PaymentProof, usePaymentProofs, useReviewPaymentProof } from '@/hooks/usePaymentProofs';
+import { PaymentProof, usePaymentProofs } from '@/hooks/usePaymentProofs';
 import { PaymentProofReviewDialog } from '@/components/admin/PaymentProofReviewDialog';
 
 export default function AdminPayments() {
@@ -22,11 +22,9 @@ export default function AdminPayments() {
   const [selectedProof, setSelectedProof] = useState<PaymentProof | null>(null);
   const [adminNotes, setAdminNotes] = useState('');
 
-  // Fetch payment proofs
   const { data: paymentProofs, refetch: refetchProofs } = usePaymentProofs();
   const pendingProofs = paymentProofs?.filter(p => p.status === 'pending') || [];
 
-  // Fetch payments summary
   const { data: payments } = useQuery({
     queryKey: ['admin-payments'],
     queryFn: async () => {
@@ -35,13 +33,11 @@ export default function AdminPayments() {
         .select('*, orders(order_number), shops(name)')
         .order('created_at', { ascending: false })
         .limit(50);
-      
       if (error) throw error;
       return data;
     }
   });
 
-  // Fetch payout requests
   const { data: payoutRequests } = useQuery({
     queryKey: ['admin-payout-requests'],
     queryFn: async () => {
@@ -49,13 +45,11 @@ export default function AdminPayments() {
         .from('payout_requests')
         .select('*, shops(id, owner_id, name, bank_name, account_number, account_name)')
         .order('created_at', { ascending: false });
-      
       if (error) throw error;
       return data;
     }
   });
 
-  // Fetch seller wallets
   const { data: wallets } = useQuery({
     queryKey: ['admin-wallets'],
     queryFn: async () => {
@@ -63,19 +57,16 @@ export default function AdminPayments() {
         .from('seller_wallets')
         .select('*, shops(name)')
         .order('balance', { ascending: false });
-      
       if (error) throw error;
       return data;
     }
   });
 
-  // Calculate totals
   const totalRevenue = payments?.filter(p => p.status === 'success').reduce((sum, p) => sum + Number(p.amount), 0) || 0;
   const totalPlatformFees = payments?.filter(p => p.status === 'success').reduce((sum, p) => sum + Number(p.platform_fee), 0) || 0;
   const pendingPayouts = payoutRequests?.filter(p => p.status === 'pending').length || 0;
   const totalSellerBalances = wallets?.reduce((sum, w) => sum + Number(w.balance), 0) || 0;
 
-  // Process payout mutation
   const processPayout = useMutation({
     mutationFn: async ({ payoutId, status }: { payoutId: string, status: 'approved' | 'rejected' }) => {
       const { error } = await supabase
@@ -89,7 +80,6 @@ export default function AdminPayments() {
 
       if (error) throw error;
 
-      // If approved, deduct from wallet
       if (status === 'approved' && selectedPayout) {
         if (selectedPayout.payout_type === 'referral') {
           const ownerId = selectedPayout.shops?.owner_id;
@@ -160,86 +150,115 @@ export default function AdminPayments() {
     <AdminLayout>
       <div className="space-y-6">
         <div>
-          <h1 className="text-3xl font-bold flex items-center gap-2">
-            <CreditCard className="h-8 w-8" /> Payments & Payouts
+          <h1 className="text-2xl lg:text-3xl font-bold flex items-center gap-2">
+            <CreditCard className="h-7 w-7 lg:h-8 lg:w-8" /> Payments & Payouts
           </h1>
-          <p className="text-muted-foreground">Manage platform payments and seller payouts</p>
+          <p className="text-muted-foreground text-sm lg:text-base">Manage platform payments and seller payouts</p>
         </div>
 
         {/* Stats Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 lg:gap-4">
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium">Total Revenue</CardTitle>
-              <DollarSign className="h-4 w-4 text-muted-foreground" />
+            <CardHeader className="flex flex-row items-center justify-between pb-2 p-3 lg:p-6 lg:pb-2">
+              <CardTitle className="text-xs lg:text-sm font-medium">Revenue</CardTitle>
+              <DollarSign className="h-4 w-4 text-muted-foreground hidden sm:block" />
             </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">₦{totalRevenue.toLocaleString()}</div>
+            <CardContent className="p-3 pt-0 lg:p-6 lg:pt-0">
+              <div className="text-lg lg:text-2xl font-bold">₦{totalRevenue.toLocaleString()}</div>
             </CardContent>
           </Card>
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium">Platform Fees (5%)</CardTitle>
-              <TrendingUp className="h-4 w-4 text-muted-foreground" />
+            <CardHeader className="flex flex-row items-center justify-between pb-2 p-3 lg:p-6 lg:pb-2">
+              <CardTitle className="text-xs lg:text-sm font-medium">Fees (5%)</CardTitle>
+              <TrendingUp className="h-4 w-4 text-muted-foreground hidden sm:block" />
             </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">₦{totalPlatformFees.toLocaleString()}</div>
+            <CardContent className="p-3 pt-0 lg:p-6 lg:pt-0">
+              <div className="text-lg lg:text-2xl font-bold">₦{totalPlatformFees.toLocaleString()}</div>
             </CardContent>
           </Card>
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium">Payment Proofs</CardTitle>
-              <Receipt className="h-4 w-4 text-muted-foreground" />
+            <CardHeader className="flex flex-row items-center justify-between pb-2 p-3 lg:p-6 lg:pb-2">
+              <CardTitle className="text-xs lg:text-sm font-medium">Proofs</CardTitle>
+              <Receipt className="h-4 w-4 text-muted-foreground hidden sm:block" />
             </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-yellow-600">{pendingProofs.length}</div>
-              <p className="text-xs text-muted-foreground">Pending review</p>
+            <CardContent className="p-3 pt-0 lg:p-6 lg:pt-0">
+              <div className="text-lg lg:text-2xl font-bold text-yellow-600">{pendingProofs.length}</div>
+              <p className="text-xs text-muted-foreground">Pending</p>
             </CardContent>
           </Card>
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium">Pending Payouts</CardTitle>
-              <Clock className="h-4 w-4 text-muted-foreground" />
+            <CardHeader className="flex flex-row items-center justify-between pb-2 p-3 lg:p-6 lg:pb-2">
+              <CardTitle className="text-xs lg:text-sm font-medium">Payouts</CardTitle>
+              <Clock className="h-4 w-4 text-muted-foreground hidden sm:block" />
             </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{pendingPayouts}</div>
+            <CardContent className="p-3 pt-0 lg:p-6 lg:pt-0">
+              <div className="text-lg lg:text-2xl font-bold">{pendingPayouts}</div>
+              <p className="text-xs text-muted-foreground">Pending</p>
             </CardContent>
           </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium">Seller Balances</CardTitle>
-              <CreditCard className="h-4 w-4 text-muted-foreground" />
+          <Card className="col-span-2 lg:col-span-1">
+            <CardHeader className="flex flex-row items-center justify-between pb-2 p-3 lg:p-6 lg:pb-2">
+              <CardTitle className="text-xs lg:text-sm font-medium">Seller Balances</CardTitle>
+              <CreditCard className="h-4 w-4 text-muted-foreground hidden sm:block" />
             </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">₦{totalSellerBalances.toLocaleString()}</div>
+            <CardContent className="p-3 pt-0 lg:p-6 lg:pt-0">
+              <div className="text-lg lg:text-2xl font-bold">₦{totalSellerBalances.toLocaleString()}</div>
             </CardContent>
           </Card>
         </div>
 
-        {/* Tabs for different sections */}
+        {/* Tabs */}
         <Tabs defaultValue="proofs" className="space-y-4">
-          <TabsList>
-            <TabsTrigger value="proofs" className="relative">
-              Payment Proofs
+          <TabsList className="w-full flex overflow-x-auto">
+            <TabsTrigger value="proofs" className="relative flex-1 text-xs lg:text-sm">
+              Proofs
               {pendingProofs.length > 0 && (
-                <span className="ml-2 bg-yellow-500 text-white text-xs px-2 py-0.5 rounded-full">
+                <span className="ml-1 bg-yellow-500 text-white text-xs px-1.5 py-0.5 rounded-full">
                   {pendingProofs.length}
                 </span>
               )}
             </TabsTrigger>
-            <TabsTrigger value="payouts">Payout Requests</TabsTrigger>
-            <TabsTrigger value="wallets">Seller Wallets</TabsTrigger>
-            <TabsTrigger value="payments">Recent Payments</TabsTrigger>
+            <TabsTrigger value="payouts" className="flex-1 text-xs lg:text-sm">Payouts</TabsTrigger>
+            <TabsTrigger value="wallets" className="flex-1 text-xs lg:text-sm">Wallets</TabsTrigger>
+            <TabsTrigger value="payments" className="flex-1 text-xs lg:text-sm">Payments</TabsTrigger>
           </TabsList>
 
           {/* Payment Proofs Tab */}
           <TabsContent value="proofs">
             <Card>
               <CardHeader>
-                <CardTitle>Payment Proofs Awaiting Review</CardTitle>
+                <CardTitle className="text-base lg:text-lg">Payment Proofs Awaiting Review</CardTitle>
               </CardHeader>
               <CardContent>
-                <Table>
+                {/* Mobile view */}
+                <div className="lg:hidden space-y-3">
+                  {paymentProofs?.length === 0 ? (
+                    <div className="text-center py-8 text-muted-foreground">No payment proofs</div>
+                  ) : paymentProofs?.map((proof) => (
+                    <Card key={proof.id}>
+                      <CardContent className="p-3 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <Badge variant={proof.payment_type === 'subscription' ? 'default' : 'secondary'}>
+                            {proof.payment_type === 'subscription' ? 'Subscription' : 'Order'}
+                          </Badge>
+                          {getStatusBadge(proof.status)}
+                        </div>
+                        <div className="text-sm">
+                          <p className="font-medium">{proof.customer_name || 'N/A'}</p>
+                          <p className="text-muted-foreground">{proof.customer_phone}</p>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="font-bold">₦{proof.amount.toLocaleString()}</span>
+                          <Button size="sm" onClick={() => setSelectedProof(proof)}>
+                            <Eye className="h-4 w-4 mr-1" /> Review
+                          </Button>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+                {/* Desktop table */}
+                <Table className="hidden lg:table">
                   <TableHeader>
                     <TableRow>
                       <TableHead>Type</TableHead>
@@ -253,9 +272,7 @@ export default function AdminPayments() {
                   <TableBody>
                     {paymentProofs?.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
-                          No payment proofs
-                        </TableCell>
+                        <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">No payment proofs</TableCell>
                       </TableRow>
                     ) : paymentProofs?.map((proof) => (
                       <TableRow key={proof.id}>
@@ -275,8 +292,7 @@ export default function AdminPayments() {
                         <TableCell>{format(new Date(proof.created_at), 'MMM d, yyyy')}</TableCell>
                         <TableCell>
                           <Button size="sm" onClick={() => setSelectedProof(proof)}>
-                            <Eye className="h-4 w-4 mr-1" />
-                            Review
+                            <Eye className="h-4 w-4 mr-1" /> Review
                           </Button>
                         </TableCell>
                       </TableRow>
@@ -291,10 +307,45 @@ export default function AdminPayments() {
           <TabsContent value="payouts">
             <Card>
               <CardHeader>
-                <CardTitle>Payout Requests</CardTitle>
+                <CardTitle className="text-base lg:text-lg">Payout Requests</CardTitle>
               </CardHeader>
               <CardContent>
-                <Table>
+                {/* Mobile */}
+                <div className="lg:hidden space-y-3">
+                  {payoutRequests?.length === 0 ? (
+                    <div className="text-center py-8 text-muted-foreground">No payout requests</div>
+                  ) : payoutRequests?.map((payout: any) => (
+                    <Card key={payout.id}>
+                      <CardContent className="p-3 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <p className="font-semibold truncate">{payout.shops?.name || 'Unknown'}</p>
+                          {getStatusBadge(payout.status)}
+                        </div>
+                        <div className="grid grid-cols-2 gap-2 text-sm">
+                          <div>
+                            <span className="text-muted-foreground">Type</span>
+                            <p>{payout.payout_type === 'referral' ? 'Referral' : 'Sales'}</p>
+                          </div>
+                          <div>
+                            <span className="text-muted-foreground">Amount</span>
+                            <p className="font-bold">₦{Number(payout.amount).toLocaleString()}</p>
+                          </div>
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          <p>{payout.bank_name || payout.shops?.bank_name || 'N/A'}</p>
+                          <p>{payout.account_number || payout.shops?.account_number}</p>
+                        </div>
+                        {payout.status === 'pending' && (
+                          <Button size="sm" className="w-full" onClick={() => setSelectedPayout(payout)}>
+                            Process
+                          </Button>
+                        )}
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+                {/* Desktop */}
+                <Table className="hidden lg:table">
                   <TableHeader>
                     <TableRow>
                       <TableHead>Shop</TableHead>
@@ -309,9 +360,7 @@ export default function AdminPayments() {
                   <TableBody>
                     {payoutRequests?.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
-                          No payout requests
-                        </TableCell>
+                        <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">No payout requests</TableCell>
                       </TableRow>
                     ) : payoutRequests?.map((payout: any) => (
                       <TableRow key={payout.id}>
@@ -327,9 +376,7 @@ export default function AdminPayments() {
                         <TableCell>{format(new Date(payout.created_at), 'MMM d, yyyy')}</TableCell>
                         <TableCell>
                           {payout.status === 'pending' && (
-                            <Button size="sm" onClick={() => setSelectedPayout(payout)}>
-                              Process
-                            </Button>
+                            <Button size="sm" onClick={() => setSelectedPayout(payout)}>Process</Button>
                           )}
                         </TableCell>
                       </TableRow>
@@ -344,10 +391,37 @@ export default function AdminPayments() {
           <TabsContent value="wallets">
             <Card>
               <CardHeader>
-                <CardTitle>Seller Wallets</CardTitle>
+                <CardTitle className="text-base lg:text-lg">Seller Wallets</CardTitle>
               </CardHeader>
               <CardContent>
-                <Table>
+                {/* Mobile */}
+                <div className="lg:hidden space-y-3">
+                  {wallets?.length === 0 ? (
+                    <div className="text-center py-8 text-muted-foreground">No seller wallets</div>
+                  ) : wallets?.map((wallet: any) => (
+                    <Card key={wallet.id}>
+                      <CardContent className="p-3 space-y-2">
+                        <p className="font-semibold">{wallet.shops?.name || 'Unknown'}</p>
+                        <div className="grid grid-cols-3 gap-2 text-sm">
+                          <div>
+                            <span className="text-muted-foreground">Balance</span>
+                            <p className="font-bold text-green-600">₦{Number(wallet.balance).toLocaleString()}</p>
+                          </div>
+                          <div>
+                            <span className="text-muted-foreground">Earned</span>
+                            <p className="font-medium">₦{Number(wallet.total_earned).toLocaleString()}</p>
+                          </div>
+                          <div>
+                            <span className="text-muted-foreground">Withdrawn</span>
+                            <p className="font-medium">₦{Number(wallet.total_withdrawn).toLocaleString()}</p>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+                {/* Desktop */}
+                <Table className="hidden lg:table">
                   <TableHeader>
                     <TableRow>
                       <TableHead>Shop</TableHead>
@@ -359,9 +433,7 @@ export default function AdminPayments() {
                   <TableBody>
                     {wallets?.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={4} className="text-center py-8 text-muted-foreground">
-                          No seller wallets
-                        </TableCell>
+                        <TableCell colSpan={4} className="text-center py-8 text-muted-foreground">No seller wallets</TableCell>
                       </TableRow>
                     ) : wallets?.map((wallet: any) => (
                       <TableRow key={wallet.id}>
@@ -381,10 +453,41 @@ export default function AdminPayments() {
           <TabsContent value="payments">
             <Card>
               <CardHeader>
-                <CardTitle>Recent Payments</CardTitle>
+                <CardTitle className="text-base lg:text-lg">Recent Payments</CardTitle>
               </CardHeader>
               <CardContent>
-                <Table>
+                {/* Mobile */}
+                <div className="lg:hidden space-y-3">
+                  {payments?.length === 0 ? (
+                    <div className="text-center py-8 text-muted-foreground">No payments yet</div>
+                  ) : payments?.map((payment: any) => (
+                    <Card key={payment.id}>
+                      <CardContent className="p-3 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="font-mono text-sm">{payment.orders?.order_number || 'N/A'}</span>
+                          {getStatusBadge(payment.status)}
+                        </div>
+                        <p className="text-sm text-muted-foreground">{payment.shops?.name || 'Unknown'}</p>
+                        <div className="grid grid-cols-3 gap-2 text-sm">
+                          <div>
+                            <span className="text-muted-foreground">Amount</span>
+                            <p className="font-bold">₦{Number(payment.amount).toLocaleString()}</p>
+                          </div>
+                          <div>
+                            <span className="text-muted-foreground">Fee</span>
+                            <p>₦{Number(payment.platform_fee).toLocaleString()}</p>
+                          </div>
+                          <div>
+                            <span className="text-muted-foreground">Seller</span>
+                            <p className="text-green-600">₦{Number(payment.seller_amount).toLocaleString()}</p>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+                {/* Desktop */}
+                <Table className="hidden lg:table">
                   <TableHeader>
                     <TableRow>
                       <TableHead>Order</TableHead>
@@ -399,9 +502,7 @@ export default function AdminPayments() {
                   <TableBody>
                     {payments?.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
-                          No payments yet
-                        </TableCell>
+                        <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">No payments yet</TableCell>
                       </TableRow>
                     ) : payments?.map((payment: any) => (
                       <TableRow key={payment.id}>
@@ -424,7 +525,7 @@ export default function AdminPayments() {
 
       {/* Process Payout Dialog */}
       <Dialog open={!!selectedPayout} onOpenChange={() => setSelectedPayout(null)}>
-        <DialogContent>
+        <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>Process Payout Request</DialogTitle>
           </DialogHeader>

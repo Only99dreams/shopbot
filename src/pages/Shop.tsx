@@ -4,7 +4,6 @@ import { supabase } from '@/integrations/supabase/client';
 import { ShopHeader } from '@/components/storefront/ShopHeader';
 import { StorefrontProductCard } from '@/components/storefront/StorefrontProductCard';
 import { CartDrawer } from '@/components/storefront/CartDrawer';
-import { CartProvider } from '@/hooks/useCart';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Search, SlidersHorizontal, Grid3X3, LayoutGrid, Package, Sparkles, ShoppingCart, CheckCircle, Clock, Loader2, Star } from 'lucide-react';
@@ -51,7 +50,7 @@ function ShopContent() {
             .select(`
               order_id,
               orders (
-                redemption_codes (code)
+                redemption_codes!order_id (code)
               )
             `)
             .eq('paystack_reference', txRef)
@@ -113,7 +112,8 @@ function ShopContent() {
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      return data;
+      // Filter out products with 0 or negative stock (if stock_quantity is set)
+      return (data || []).filter(p => p.stock_quantity === null || p.stock_quantity > 0);
     },
     enabled: !!shopId
   });
@@ -729,9 +729,5 @@ function ShopContent() {
 }
 
 export default function Shop() {
-  return (
-    <CartProvider>
-      <ShopContent />
-    </CartProvider>
-  );
+  return <ShopContent />;
 }

@@ -78,16 +78,13 @@ export default function Subscription() {
   const currentPlan = subscription?.plan || "starter";
   const isInactive = subscription?.status !== "active";
 
-  const currentPlanAmount = selectedPlan?.price
-    ?? (subscriptionPlans && (subscriptionPlans as any)[currentPlan]?.price)
-    ?? 0;
-
   // Detect Flutterwave callback params on mount
   const transactionId = searchParams.get('transaction_id');
   const flwStatus = searchParams.get('status');
+  const txRef = searchParams.get('tx_ref');
   const hasFlutterwaveCallback = !!(transactionId && flwStatus === 'successful');
   
-  console.log('Subscription page params:', { transactionId, flwStatus, hasFlutterwaveCallback });
+  console.log('Subscription page params:', { transactionId, flwStatus, txRef, hasFlutterwaveCallback });
 
   const loadBillingHistory = async () => {
     if (!shop?.id) return;
@@ -109,7 +106,7 @@ export default function Subscription() {
     }
   };
 
-  // Handle Flutterwave payment callback - activate subscription directly
+  // Handle Flutterwave payment callback - verify server-side and activate subscription
   useEffect(() => {
     console.log('Activation effect deps:', { hasFlutterwaveCallback, shopId: shop?.id, verificationAttempted: verificationAttempted.current });
     
@@ -129,89 +126,89 @@ export default function Subscription() {
     const activateSubscription = async () => {
       try {
         const shopId = shop.id;
-        const planId = selectedPlan?.id || currentPlan || 'starter';
-        console.log('Flutterwave callback detected - Activating subscription for shop:', shopId, 'plan:', planId);
+        console.log('Flutterwave callback detected - Verifying payment for shop:', shopId);
 
-        const now = new Date();
-        const periodEnd = new Date(now);
-        periodEnd.setMonth(periodEnd.getMonth() + 1);
+        // Step 1: Call flutterwave-verify edge function (uses service role key, bypasses RLS)
+        // This will verify the payment with Flutterwave AND activate the subscription server-side
+        if (transactionId) {
+          console.log('Calling flutterwave-verify with transactionId:', transactionId, 'txRef:', txRef);
+          const { data: verifyData, error: verifyError } = await supabase.functions.invoke('flutterwave-verify', {
+            body: { transactionId, txRef: txRef || '' },
+          });
 
-        // Check if subscription exists
-        const { data: existingSub, error: fetchError } = await supabase
+          if (verifyError) {
+            console.error('Flutterwave verify error:', verifyError);
+            // Try to extract real error message
+            let message = 'Payment verification failed';
+            try {
+              if (verifyError.context && typeof verifyError.context.json === 'function') {
+                const body = await verifyError.context.json();
+                message = body?.error || verifyError.message || message;
+              }
+            } catch { /* ignore */ }
+            throw new Error(message);
+          }
+
+          console.log('Flutterwave verify response:', verifyData);
+
+          if (verifyData?.success) {
+            console.log('Payment verified successfully! Subscription activated server-side.');
+          } else {
+            console.warn('Payment verification returned success=false, attempting direct activation...');
+            // Fall through to direct activation below
+          }
+        }
+
+        // Step 2: As a safety net, also try direct activation in case flutterwave-verify
+        // didn't handle the subscription (e.g., if tx_ref was missing from meta)
+        const { data: currentSub } = await supabase
           .from('subscriptions')
-          .select('id')
+          .select('id, status')
           .eq('shop_id', shopId)
           .maybeSingle();
 
-        if (fetchError) {
-          console.error('Error fetching subscription:', fetchError);
-          throw fetchError;
-        }
+        if (currentSub && currentSub.status !== 'active') {
+          console.log('Subscription still not active after verify, attempting direct activation...');
+          const now = new Date();
+          const periodEnd = new Date(now);
+          periodEnd.setMonth(periodEnd.getMonth() + 1);
 
-        // Update or insert subscription
-        let subscriptionId: string | null = null;
-
-        if (existingSub) {
-          console.log('Updating existing subscription:', existingSub.id);
           const { error: updateError } = await supabase
             .from('subscriptions')
             .update({
               status: 'active',
-              plan: planId,
+              plan: selectedPlan?.id || currentPlan || 'starter',
               current_period_start: now.toISOString(),
               current_period_end: periodEnd.toISOString(),
             })
-            .eq('id', existingSub.id);
+            .eq('id', currentSub.id);
 
           if (updateError) {
-            console.error('Error updating subscription:', updateError);
-            throw updateError;
+            console.error('Direct subscription update failed:', updateError);
+          } else {
+            console.log('Direct subscription activation succeeded');
           }
 
-          subscriptionId = existingSub.id;
-        } else {
-          console.log('Creating new subscription');
-          const { data: insertedSub, error: insertError } = await supabase
-            .from('subscriptions')
-            .insert({
-              shop_id: shopId,
-              plan: planId,
-              status: 'active',
-              current_period_start: now.toISOString(),
-              current_period_end: periodEnd.toISOString(),
-            })
-            .select('id')
-            .maybeSingle();
-
-          if (insertError) {
-            console.error('Error inserting subscription:', insertError);
-            throw insertError;
-          }
-
-          subscriptionId = insertedSub?.id ?? null;
+          // Also activate the shop directly
+          await supabase
+            .from('shops')
+            .update({ is_active: true })
+            .eq('id', shopId);
         }
 
-        // Activate the shop
-        console.log('Activating shop');
-        const { error: shopError } = await supabase
-          .from('shops')
-          .update({ is_active: true })
-          .eq('id', shopId);
+        // Step 3: Record billing history
+        const planAmount = selectedPlan?.price
+          ?? (subscriptionPlans && (subscriptionPlans as any)[currentPlan]?.price)
+          ?? 0;
 
-        if (shopError) {
-          console.error('Error activating shop:', shopError);
-          throw shopError;
-        }
-
-        // Record billing history (auto-approved)
-        if (subscriptionId && currentPlanAmount > 0) {
+        if (currentSub?.id && planAmount > 0) {
           const { error: proofError } = await supabase
             .from('payment_proofs')
             .insert({
               payment_type: 'subscription',
-              reference_id: subscriptionId,
+              reference_id: currentSub.id,
               shop_id: shopId,
-              amount: currentPlanAmount,
+              amount: planAmount,
               status: 'approved',
               admin_notes: transactionId ? `Flutterwave transaction_id: ${transactionId}` : null,
             });

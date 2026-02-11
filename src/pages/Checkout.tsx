@@ -1,8 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import { CartProvider, useCart } from '@/hooks/useCart';
+import { useCart } from '@/hooks/useCart';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -36,7 +36,14 @@ function CheckoutContent() {
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isProcessing, setIsProcessing] = useState(false);
-  const [paymentSuccess, setPaymentSuccess] = useState(false);
+  // Persist payment success in sessionStorage to survive remounts
+  const [paymentSuccess, setPaymentSuccess] = useState(() => {
+    const stored = sessionStorage.getItem(`checkout-success-${shopId}`);
+    return stored === 'true';
+  });
+  const [completedOrderNumber, setCompletedOrderNumber] = useState<string | null>(() => {
+    return sessionStorage.getItem(`checkout-order-${shopId}`);
+  });
 
   const { data: shop } = useQuery({
     queryKey: ['shop', shopId],
@@ -185,32 +192,82 @@ function CheckoutContent() {
     }
   };
 
+  // Detect Flutterwave callback params synchronously (before first render)
+  const callbackTransactionId = searchParams.get('transaction_id');
+  const callbackTxRef = searchParams.get('tx_ref');
+  const callbackStatus = searchParams.get('status');
+  const isSuccessStatus = callbackStatus === 'successful' || callbackStatus === 'completed';
+  const hasFlutterwaveCallback = !!(isSuccessStatus && (callbackTransactionId || callbackTxRef));
+  const [verifyError, setVerifyError] = useState<string | null>(null);
+  const verificationAttempted = useRef(false);
+
   // Handle Flutterwave payment callback
   useEffect(() => {
-    const transactionId = searchParams.get('transaction_id');
-    const txRef = searchParams.get('tx_ref');
-    const status = searchParams.get('status');
+    if (!hasFlutterwaveCallback || verificationAttempted.current) return;
+    verificationAttempted.current = true;
+    setIsProcessing(true);
 
-    if (transactionId && txRef && status === 'successful') {
-      setIsProcessing(true);
-      supabase.functions.invoke('flutterwave-verify', {
-        body: { transactionId, txRef },
-      }).then(({ data, error }) => {
-        if (error || !data?.success) {
-          toast.error('Payment verification failed. Please contact support.');
-        } else {
-          setPaymentSuccess(true);
-          toast.success('Payment successful! Your order has been confirmed.');
-          clearCart();
+    supabase.functions.invoke('flutterwave-verify', {
+      body: { transactionId: callbackTransactionId, txRef: callbackTxRef || '' },
+    }).then(async ({ data, error }) => {
+      if (error) {
+        let message = 'Payment verification failed';
+        try {
+          if (error.context && typeof error.context.json === 'function') {
+            const body = await error.context.json();
+            message = body?.error || error.message || message;
+          }
+        } catch { /* ignore */ }
+        console.error('Flutterwave verify error:', message);
+        setVerifyError(message);
+        toast.error(message);
+      } else if (!data?.success) {
+        const msg = data?.error || 'Payment could not be verified';
+        setVerifyError(msg);
+        toast.error(msg);
+      } else {
+        // Get the order number from tx_ref or meta (format: SHOPAF_{orderId}_{timestamp})
+        const orderId = data.order_id || callbackTxRef?.split('_')[1];
+        let orderNum = null;
+        if (orderId) {
+          const { data: orderData } = await supabase
+            .from('orders')
+            .select('order_number')
+            .eq('id', orderId)
+            .maybeSingle();
+          if (orderData) orderNum = orderData.order_number;
         }
-        setIsProcessing(false);
-        setSearchParams({});
-      });
-    } else if (status === 'cancelled') {
+        
+        console.log('Payment verified successfully, clearing cart and showing success screen');
+        // Persist success state to sessionStorage to survive remounts
+        sessionStorage.setItem(`checkout-success-${shopId}`, 'true');
+        if (orderNum) sessionStorage.setItem(`checkout-order-${shopId}`, orderNum);
+        setPaymentSuccess(true);
+        setCompletedOrderNumber(orderNum);
+        clearCart();
+        toast.success('Payment successful! Your order has been confirmed.');
+      }
+      setIsProcessing(false);
+      // Clear URL params after processing, but give UI time to show success
+      setTimeout(() => {
+        setSearchParams({}, { replace: true });
+      }, 1000);
+    });
+  }, [hasFlutterwaveCallback, clearCart, setSearchParams, callbackTransactionId, callbackTxRef, shopId]);
+
+  // Handle cancelled payment
+  useEffect(() => {
+    if (callbackStatus === 'cancelled') {
       toast.error('Payment was cancelled.');
-      setSearchParams({});
+      setSearchParams({}, { replace: true });
     }
-  }, [searchParams, setSearchParams, clearCart]);
+  }, [callbackStatus, setSearchParams]);
+
+  // Clear sessionStorage success state when navigating away
+  const handleNavigateAway = () => {
+    sessionStorage.removeItem(`checkout-success-${shopId}`);
+    sessionStorage.removeItem(`checkout-order-${shopId}`);
+  };
 
   // Payment success screen
   if (paymentSuccess) {
@@ -221,12 +278,59 @@ function CheckoutContent() {
             <CheckCircle className="h-12 w-12 text-green-500" />
           </div>
           <h1 className="text-2xl font-bold mb-2">Payment Successful!</h1>
+          {completedOrderNumber && (
+            <p className="text-sm font-mono bg-muted rounded-lg px-4 py-2 mb-4 inline-block">
+              Order: {completedOrderNumber}
+            </p>
+          )}
           <p className="text-muted-foreground mb-6">
-            Your order has been confirmed. You'll receive a redemption code to confirm delivery.
+            Your order has been confirmed and the seller has been notified. You can track your order using the order number on the Marketplace page.
           </p>
-          <Link to={`/shop/${shopId}`}>
-            <Button size="lg" className="rounded-full px-8">Back to Shop</Button>
-          </Link>
+          <div className="flex flex-col sm:flex-row gap-3 justify-center">
+            <Link to="/marketplace" onClick={handleNavigateAway}>
+              <Button size="lg" className="rounded-full px-8">Track Order</Button>
+            </Link>
+            <Link to={`/shop/${shopId}`} onClick={handleNavigateAway}>
+              <Button size="lg" variant="outline" className="rounded-full px-8">Back to Shop</Button>
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Verifying payment screen (shown immediately when Flutterwave redirects back)
+  if (hasFlutterwaveCallback || isProcessing) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-b from-muted/30 to-background">
+        <div className="text-center max-w-md px-4">
+          {verifyError ? (
+            <>
+              <div className="h-24 w-24 mx-auto mb-6 rounded-full bg-red-500/10 flex items-center justify-center">
+                <Shield className="h-12 w-12 text-red-500" />
+              </div>
+              <h1 className="text-2xl font-bold mb-2">Verification Failed</h1>
+              <p className="text-muted-foreground mb-6">
+                {verifyError}. If you were debited, please contact support with your transaction details.
+              </p>
+              <div className="flex flex-col sm:flex-row gap-3 justify-center">
+                <Link to="/marketplace">
+                  <Button size="lg" className="rounded-full px-8">Track Order</Button>
+                </Link>
+                <Link to={`/shop/${shopId}`}>
+                  <Button size="lg" variant="outline" className="rounded-full px-8">Back to Shop</Button>
+                </Link>
+              </div>
+            </>
+          ) : (
+            <>
+              <Loader2 className="h-16 w-16 mx-auto mb-6 animate-spin text-primary" />
+              <h1 className="text-2xl font-bold mb-2">Verifying Payment...</h1>
+              <p className="text-muted-foreground">
+                Please wait while we confirm your payment. Do not close this page.
+              </p>
+            </>
+          )}
         </div>
       </div>
     );
@@ -514,9 +618,5 @@ function CheckoutContent() {
 }
 
 export default function Checkout() {
-  return (
-    <CartProvider>
-      <CheckoutContent />
-    </CartProvider>
-  );
+  return <CheckoutContent />;
 }

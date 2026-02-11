@@ -1,7 +1,7 @@
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import { CartProvider, useCart } from '@/hooks/useCart';
+import { useCart } from '@/hooks/useCart';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ChevronLeft, ShoppingCart, Minus, Plus, Heart, Share2, Shield, Truck, RotateCcw, Star } from 'lucide-react';
@@ -464,11 +464,7 @@ function ProductDetailContent() {
 }
 
 export default function ProductDetail() {
-  return (
-    <CartProvider>
-      <ProductDetailContent />
-    </CartProvider>
-  );
+  return <ProductDetailContent />;
 }
 
 // RatingForm component

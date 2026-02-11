@@ -7,6 +7,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import { AuthProvider } from "@/hooks/useAuth";
 import { ShopProvider } from "@/hooks/useShop";
+import { CartProvider } from "@/hooks/useCart";
 import Index from "./pages/Index";
 import PWAInstallManager from "./components/PWAInstallManager";
 import Preloader from "./components/Preloader";
@@ -95,6 +96,7 @@ const App = () => {
             <BrowserRouter>
               <AuthProvider>
               <ShopProvider>
+              <CartProvider>
                 <StandaloneHandler />
                 <Preloader visible={loading} />
                 <PWAInstallManager />
@@ -135,6 +137,7 @@ const App = () => {
                 <Route path="/admin/settings" element={<ProtectedRoute requireAdmin><AdminSettings /></ProtectedRoute>} />
                 <Route path="*" element={<NotFound />} />
               </Routes>
+              </CartProvider>
             </ShopProvider>
             </AuthProvider>
           </BrowserRouter>

@@ -95,24 +95,24 @@ export default function AdminReferrals() {
 
   return (
     <AdminLayout>
-      <div className="p-6 lg:p-8">
-        <div className="mb-8">
+      <div className="space-y-6">
+        <div>
           <h1 className="text-2xl lg:text-3xl font-bold">Referrals</h1>
-          <p className="text-muted-foreground">Manage platform referral program</p>
+          <p className="text-muted-foreground text-sm lg:text-base">Manage platform referral program</p>
         </div>
 
         {/* Stats Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-4">
           {stats.map((stat) => (
             <Card key={stat.title}>
-              <CardContent className="pt-6">
+              <CardContent className="p-3 lg:pt-6 lg:p-6">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm font-medium text-muted-foreground">{stat.title}</p>
-                    <p className="text-2xl font-bold">{stat.value}</p>
+                    <p className="text-xs lg:text-sm font-medium text-muted-foreground">{stat.title}</p>
+                    <p className="text-lg lg:text-2xl font-bold">{stat.value}</p>
                   </div>
-                  <div className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center">
-                    <stat.icon className="h-6 w-6 text-primary" />
+                  <div className="h-10 w-10 lg:h-12 lg:w-12 rounded-lg bg-primary/10 flex items-center justify-center">
+                    <stat.icon className="h-5 w-5 lg:h-6 lg:w-6 text-primary" />
                   </div>
                 </div>
               </CardContent>
@@ -120,10 +120,10 @@ export default function AdminReferrals() {
           ))}
         </div>
 
-        {/* Referral Codes Table */}
-        <Card className="mb-8">
+        {/* Referral Codes */}
+        <Card>
           <CardHeader>
-            <CardTitle>Referral Codes</CardTitle>
+            <CardTitle className="text-base lg:text-lg">Referral Codes</CardTitle>
           </CardHeader>
           <CardContent>
             {codesLoading ? (
@@ -131,47 +131,69 @@ export default function AdminReferrals() {
                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
               </div>
             ) : referralCodes && referralCodes.length > 0 ? (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Code</TableHead>
-                    <TableHead>Seller</TableHead>
-                    <TableHead>Total Referrals</TableHead>
-                    <TableHead>Total Earnings</TableHead>
-                    <TableHead>Created</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
+              <>
+                {/* Mobile */}
+                <div className="lg:hidden space-y-3">
                   {referralCodes.map((code) => (
-                    <TableRow key={code.id}>
-                      <TableCell className="font-mono font-medium">{code.code}</TableCell>
-                      <TableCell>
-                        <div>
-                          <p className="font-medium">{code.profile?.full_name || 'Unknown Seller'}</p>
+                    <Card key={code.id}>
+                      <CardContent className="p-3 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="font-mono font-semibold">{code.code}</span>
+                          <span className="text-sm font-bold">₦{(code.total_earnings || 0).toLocaleString()}</span>
+                        </div>
+                        <div className="text-sm">
+                          <p className="font-medium">{code.profile?.full_name || 'Unknown'}</p>
                           <p className="text-xs text-muted-foreground">{code.profile?.email || code.user_id.substring(0, 8) + '...'}</p>
                         </div>
-                      </TableCell>
-                      <TableCell>{code.total_referrals || 0}</TableCell>
-                      <TableCell>₦{(code.total_earnings || 0).toLocaleString()}</TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {new Date(code.created_at).toLocaleDateString()}
-                      </TableCell>
-                    </TableRow>
+                        <div className="flex justify-between text-sm">
+                          <span className="text-muted-foreground">Referrals: <strong>{code.total_referrals || 0}</strong></span>
+                          <span className="text-muted-foreground">{new Date(code.created_at).toLocaleDateString()}</span>
+                        </div>
+                      </CardContent>
+                    </Card>
                   ))}
-                </TableBody>
-              </Table>
+                </div>
+                {/* Desktop */}
+                <Table className="hidden lg:table">
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Code</TableHead>
+                      <TableHead>Seller</TableHead>
+                      <TableHead>Total Referrals</TableHead>
+                      <TableHead>Total Earnings</TableHead>
+                      <TableHead>Created</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {referralCodes.map((code) => (
+                      <TableRow key={code.id}>
+                        <TableCell className="font-mono font-medium">{code.code}</TableCell>
+                        <TableCell>
+                          <div>
+                            <p className="font-medium">{code.profile?.full_name || 'Unknown Seller'}</p>
+                            <p className="text-xs text-muted-foreground">{code.profile?.email || code.user_id.substring(0, 8) + '...'}</p>
+                          </div>
+                        </TableCell>
+                        <TableCell>{code.total_referrals || 0}</TableCell>
+                        <TableCell>₦{(code.total_earnings || 0).toLocaleString()}</TableCell>
+                        <TableCell className="text-muted-foreground">
+                          {new Date(code.created_at).toLocaleDateString()}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </>
             ) : (
-              <div className="text-center py-8 text-muted-foreground">
-                No referral codes yet
-              </div>
+              <div className="text-center py-8 text-muted-foreground">No referral codes yet</div>
             )}
           </CardContent>
         </Card>
 
-        {/* Recent Referrals Table */}
+        {/* Recent Referrals */}
         <Card>
           <CardHeader>
-            <CardTitle>Recent Referrals</CardTitle>
+            <CardTitle className="text-base lg:text-lg">Recent Referrals</CardTitle>
           </CardHeader>
           <CardContent>
             {referralsLoading ? (
@@ -179,46 +201,74 @@ export default function AdminReferrals() {
                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
               </div>
             ) : referrals && referrals.length > 0 ? (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Referral Code</TableHead>
-                    <TableHead>Referrer</TableHead>
-                    <TableHead>Referred</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Reward</TableHead>
-                    <TableHead>Date</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
+              <>
+                {/* Mobile */}
+                <div className="lg:hidden space-y-3">
                   {referrals.map((referral) => (
-                    <TableRow key={referral.id}>
-                      <TableCell className="font-mono">{referral.referral_code}</TableCell>
-                      <TableCell>
-                        <div>
-                          <p className="font-medium">{referral.referrer_profile?.full_name || 'Unknown Seller'}</p>
-                          <p className="text-xs text-muted-foreground">{referral.referrer_profile?.email || referral.referrer_id.substring(0, 8) + '...'}</p>
+                    <Card key={referral.id}>
+                      <CardContent className="p-3 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="font-mono text-sm">{referral.referral_code}</span>
+                          {getStatusBadge(referral.status)}
                         </div>
-                      </TableCell>
-                      <TableCell>
-                        <div>
-                          <p className="font-medium">{referral.referred_profile?.full_name || 'Unknown User'}</p>
-                          <p className="text-xs text-muted-foreground">{referral.referred_profile?.email || referral.referred_id.substring(0, 8) + '...'}</p>
+                        <div className="grid grid-cols-2 gap-2 text-sm">
+                          <div>
+                            <span className="text-muted-foreground">Referrer</span>
+                            <p className="font-medium truncate">{referral.referrer_profile?.full_name || 'Unknown'}</p>
+                          </div>
+                          <div>
+                            <span className="text-muted-foreground">Referred</span>
+                            <p className="font-medium truncate">{referral.referred_profile?.full_name || 'Unknown'}</p>
+                          </div>
                         </div>
-                      </TableCell>
-                      <TableCell>{getStatusBadge(referral.status)}</TableCell>
-                      <TableCell>₦{(referral.reward_amount || 0).toLocaleString()}</TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {new Date(referral.created_at).toLocaleDateString()}
-                      </TableCell>
-                    </TableRow>
+                        <div className="flex justify-between text-sm">
+                          <span className="font-bold">₦{(referral.reward_amount || 0).toLocaleString()}</span>
+                          <span className="text-muted-foreground">{new Date(referral.created_at).toLocaleDateString()}</span>
+                        </div>
+                      </CardContent>
+                    </Card>
                   ))}
-                </TableBody>
-              </Table>
+                </div>
+                {/* Desktop */}
+                <Table className="hidden lg:table">
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Referral Code</TableHead>
+                      <TableHead>Referrer</TableHead>
+                      <TableHead>Referred</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Reward</TableHead>
+                      <TableHead>Date</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {referrals.map((referral) => (
+                      <TableRow key={referral.id}>
+                        <TableCell className="font-mono">{referral.referral_code}</TableCell>
+                        <TableCell>
+                          <div>
+                            <p className="font-medium">{referral.referrer_profile?.full_name || 'Unknown Seller'}</p>
+                            <p className="text-xs text-muted-foreground">{referral.referrer_profile?.email || referral.referrer_id.substring(0, 8) + '...'}</p>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div>
+                            <p className="font-medium">{referral.referred_profile?.full_name || 'Unknown User'}</p>
+                            <p className="text-xs text-muted-foreground">{referral.referred_profile?.email || referral.referred_id.substring(0, 8) + '...'}</p>
+                          </div>
+                        </TableCell>
+                        <TableCell>{getStatusBadge(referral.status)}</TableCell>
+                        <TableCell>₦{(referral.reward_amount || 0).toLocaleString()}</TableCell>
+                        <TableCell className="text-muted-foreground">
+                          {new Date(referral.created_at).toLocaleDateString()}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </>
             ) : (
-              <div className="text-center py-8 text-muted-foreground">
-                No referrals yet
-              </div>
+              <div className="text-center py-8 text-muted-foreground">No referrals yet</div>
             )}
           </CardContent>
         </Card>
