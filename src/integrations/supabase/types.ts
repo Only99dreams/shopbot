@@ -266,6 +266,7 @@ export type Database = {
       otp_verifications: {
         Row: {
           created_at: string
+          email: string | null
           expires_at: string
           id: string
           otp_code: string
@@ -274,6 +275,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          email?: string | null
           expires_at: string
           id?: string
           otp_code: string
@@ -282,6 +284,7 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          email?: string | null
           expires_at?: string
           id?: string
           otp_code?: string

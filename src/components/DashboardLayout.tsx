@@ -105,11 +105,11 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
       {/* Sidebar */}
       <aside
         className={cn(
-          "fixed left-0 top-0 z-40 h-screen bg-card border-r border-border transition-all duration-300",
-          "lg:translate-x-0",
+          "fixed left-0 z-40 bg-card border-r border-border transition-all duration-300",
+          "lg:translate-x-0 lg:top-0 lg:h-screen",
+          "top-14 h-[calc(100vh-3.5rem)]",
           collapsed ? "lg:w-16" : "lg:w-64",
-          mobileOpen ? "translate-x-0 w-64" : "-translate-x-full",
-          "lg:top-0 top-14"
+          mobileOpen ? "translate-x-0 w-64" : "-translate-x-full"
         )}
       >
         <div className="flex h-full flex-col">
