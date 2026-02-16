@@ -325,6 +325,25 @@ function ShopContent() {
         description={ogDescription}
         image={ogImage}
         url={shopUrl}
+        localBusiness={{
+          name: shop.name,
+          description: shop.description || undefined,
+          image: shop.logo_url || undefined,
+          url: shopUrl,
+          address: {
+            city: shop.city || undefined,
+            state: shop.state || undefined,
+            country: 'NG',
+          },
+          telephone: shop.whatsapp_number || undefined,
+          ratingValue: avgRating ?? undefined,
+          ratingCount: ratingCount || undefined,
+        }}
+        breadcrumbs={[
+          { name: 'Home', url: 'https://shopafrica.online/' },
+          { name: 'Marketplace', url: 'https://shopafrica.online/marketplace' },
+          { name: shop.name, url: shopUrl },
+        ]}
       />
       
       <ShopHeader 

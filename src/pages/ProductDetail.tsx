@@ -9,6 +9,7 @@ import { useState } from 'react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { DynamicMeta } from '@/components/SEO/DynamicMeta';
 
 function ProductDetailContent() {
   const { shopId, productId } = useParams<{ shopId: string; productId: string }>();
@@ -194,6 +195,32 @@ function ProductDetailContent() {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-muted/30 to-background">
+      <DynamicMeta
+        title={`${product.name} | ${shop?.name || 'ShopAfrica'}`}
+        description={product.description || `Buy ${product.name} for ₦${product.price.toLocaleString()} on ShopAfrica.`}
+        image={product.images?.[0] || undefined}
+        url={`https://shopafrica.online/shop/${shopId}/product/${productId}`}
+        type="product"
+        product={{
+          name: product.name,
+          description: product.description || undefined,
+          image: product.images?.[0] || undefined,
+          price: product.price,
+          currency: 'NGN',
+          availability: isOutOfStock ? 'OutOfStock' : 'InStock',
+          category: (product as any).categories?.name || undefined,
+          brand: shop?.name || undefined,
+          sku: product.id,
+          ratingValue: sellerRating?.avg ?? undefined,
+          ratingCount: sellerRating?.count ?? undefined,
+        }}
+        breadcrumbs={[
+          { name: 'Home', url: 'https://shopafrica.online/' },
+          { name: 'Marketplace', url: 'https://shopafrica.online/marketplace' },
+          { name: shop?.name || 'Shop', url: `https://shopafrica.online/shop/${shopId}` },
+          { name: product.name, url: `https://shopafrica.online/shop/${shopId}/product/${productId}` },
+        ]}
+      />
       {/* Header */}
       <header className="sticky top-0 z-40 bg-background/80 backdrop-blur-lg border-b">
         <div className="container mx-auto px-4 py-3 flex items-center justify-between">

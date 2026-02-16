@@ -1,11 +1,48 @@
 import { Helmet } from 'react-helmet-async';
 
+interface ProductSchema {
+  name: string;
+  description?: string;
+  image?: string;
+  price?: number;
+  currency?: string;
+  availability?: 'InStock' | 'OutOfStock' | 'PreOrder';
+  category?: string;
+  brand?: string;
+  sku?: string;
+  ratingValue?: number;
+  ratingCount?: number;
+}
+
+interface LocalBusinessSchema {
+  name: string;
+  description?: string;
+  image?: string;
+  url?: string;
+  address?: {
+    city?: string;
+    state?: string;
+    country?: string;
+  };
+  telephone?: string;
+  ratingValue?: number;
+  ratingCount?: number;
+}
+
+interface BreadcrumbItem {
+  name: string;
+  url: string;
+}
+
 interface DynamicMetaProps {
   title: string;
   description: string;
   image?: string;
   url?: string;
   type?: string;
+  product?: ProductSchema;
+  localBusiness?: LocalBusinessSchema;
+  breadcrumbs?: BreadcrumbItem[];
 }
 
 // Generate OG image URL using a free service or fallback to default
@@ -42,7 +79,10 @@ export function DynamicMeta({
   description, 
   image,
   url,
-  type = 'website'
+  type = 'website',
+  product,
+  localBusiness,
+  breadcrumbs,
 }: DynamicMetaProps) {
   const currentUrl = url || (typeof window !== 'undefined' ? window.location.href : '');
   
@@ -55,6 +95,81 @@ export function DynamicMeta({
   } else {
     // Generate dynamic OG image
     imageUrl = generateOgImageUrl(title, description, image);
+  }
+
+  // Build JSON-LD structured data
+  const jsonLdScripts: object[] = [];
+
+  // Breadcrumb schema
+  if (breadcrumbs && breadcrumbs.length > 0) {
+    jsonLdScripts.push({
+      '@context': 'https://schema.org',
+      '@type': 'BreadcrumbList',
+      itemListElement: breadcrumbs.map((item, index) => ({
+        '@type': 'ListItem',
+        position: index + 1,
+        name: item.name,
+        item: item.url,
+      })),
+    });
+  }
+
+  // Product schema
+  if (product) {
+    const productSchema: Record<string, unknown> = {
+      '@context': 'https://schema.org',
+      '@type': 'Product',
+      name: product.name,
+      description: product.description || description,
+      image: product.image || imageUrl,
+      ...(product.sku && { sku: product.sku }),
+      ...(product.brand && { brand: { '@type': 'Brand', name: product.brand } }),
+      ...(product.category && { category: product.category }),
+      offers: {
+        '@type': 'Offer',
+        price: product.price ?? 0,
+        priceCurrency: product.currency || 'NGN',
+        availability: `https://schema.org/${product.availability || 'InStock'}`,
+        url: currentUrl,
+      },
+    };
+    if (product.ratingValue && product.ratingCount) {
+      productSchema.aggregateRating = {
+        '@type': 'AggregateRating',
+        ratingValue: product.ratingValue,
+        reviewCount: product.ratingCount,
+      };
+    }
+    jsonLdScripts.push(productSchema);
+  }
+
+  // LocalBusiness schema (for shop pages)
+  if (localBusiness) {
+    const bizSchema: Record<string, unknown> = {
+      '@context': 'https://schema.org',
+      '@type': 'Store',
+      name: localBusiness.name,
+      description: localBusiness.description || description,
+      image: localBusiness.image || imageUrl,
+      url: localBusiness.url || currentUrl,
+      ...(localBusiness.telephone && { telephone: localBusiness.telephone }),
+    };
+    if (localBusiness.address) {
+      bizSchema.address = {
+        '@type': 'PostalAddress',
+        addressLocality: localBusiness.address.city,
+        addressRegion: localBusiness.address.state,
+        addressCountry: localBusiness.address.country || 'NG',
+      };
+    }
+    if (localBusiness.ratingValue && localBusiness.ratingCount) {
+      bizSchema.aggregateRating = {
+        '@type': 'AggregateRating',
+        ratingValue: localBusiness.ratingValue,
+        reviewCount: localBusiness.ratingCount,
+      };
+    }
+    jsonLdScripts.push(bizSchema);
   }
   
   return (
@@ -79,6 +194,13 @@ export function DynamicMeta({
       <meta name="twitter:title" content={title} />
       <meta name="twitter:description" content={description} />
       <meta name="twitter:image" content={imageUrl} />
+
+      {/* JSON-LD Structured Data */}
+      {jsonLdScripts.map((schema, i) => (
+        <script key={i} type="application/ld+json">
+          {JSON.stringify(schema)}
+        </script>
+      ))}
     </Helmet>
   );
 }

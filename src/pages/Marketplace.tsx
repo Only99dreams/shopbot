@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { DynamicMeta } from '@/components/SEO/DynamicMeta';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -375,6 +376,12 @@ export default function Marketplace() {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-muted/30 to-background">
+      <DynamicMeta
+        title="ShopAfrica Marketplace - Compare Prices & Shop Local"
+        description="Browse thousands of products from local sellers. Compare prices, find the best deals, and shop with confidence on ShopAfrica."
+        url="https://shopafrica.online/marketplace"
+        image="https://shopafrica.online/og-default.jpg"
+      />
       {/* Hero Header */}
       <header className="relative bg-gradient-to-br from-primary via-primary/90 to-primary/80 text-white overflow-hidden">
         {/* Background Pattern */}

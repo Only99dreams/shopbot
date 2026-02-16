@@ -26,12 +26,94 @@
     <meta name="twitter:image" content="https://shopafrica.online/og-default.jpg" />
 
     <!-- Favicon -->
-    <link rel="icon" type="image/svg+xml" href="/logo.svg" />
+    <link rel="icon" type="image/svg+xml" href="/logo.png" />
     <link rel="icon" type="image/png" sizes="48x48" href="/logo.png" />
     <link rel="apple-touch-icon" href="/logo.png" />
     <link rel="manifest" href="/manifest.webmanifest" />
     <meta name="theme-color" content="#10b981" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
+
+    <!-- Structured Data / JSON-LD for Rich Results -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@graph": [
+        {
+          "@type": "Organization",
+          "@id": "https://shopafrica.online/#organization",
+          "name": "ShopAfrica",
+          "url": "https://shopafrica.online",
+          "logo": {
+            "@type": "ImageObject",
+            "url": "https://shopafrica.online/logo.png",
+            "width": 512,
+            "height": 512
+          },
+          "sameAs": [
+            "https://twitter.com/ShopAfricaNG"
+          ],
+          "description": "Create your online store in minutes. Compare prices in your area to get the best deals. AI-powered support, secure payments, and connect with local sellers."
+        },
+        {
+          "@type": "WebSite",
+          "@id": "https://shopafrica.online/#website",
+          "url": "https://shopafrica.online",
+          "name": "ShopAfrica",
+          "publisher": {
+            "@id": "https://shopafrica.online/#organization"
+          },
+          "potentialAction": {
+            "@type": "SearchAction",
+            "target": {
+              "@type": "EntryPoint",
+              "urlTemplate": "https://shopafrica.online/marketplace?q={search_term_string}"
+            },
+            "query-input": "required name=search_term_string"
+          }
+        },
+        {
+          "@type": "WebApplication",
+          "@id": "https://shopafrica.online/#app",
+          "name": "ShopAfrica",
+          "url": "https://shopafrica.online",
+          "applicationCategory": "BusinessApplication",
+          "operatingSystem": "Web",
+          "offers": {
+            "@type": "Offer",
+            "price": "0",
+            "priceCurrency": "NGN",
+            "description": "Free plan available - Create your online store for free"
+          },
+          "featureList": [
+            "Online store creation",
+            "Price comparison",
+            "AI-powered chatbot",
+            "Secure payments",
+            "WhatsApp integration",
+            "Product catalog management"
+          ],
+          "screenshot": "https://shopafrica.online/og-default.jpg"
+        },
+        {
+          "@type": "WebPage",
+          "@id": "https://shopafrica.online/#webpage",
+          "url": "https://shopafrica.online",
+          "name": "ShopAfrica - Sell Smarter, Compare Prices, Shop Local",
+          "description": "Create your online store in minutes. Compare prices in your area to get the best deals. AI-powered support, secure payments, and connect with local sellers.",
+          "isPartOf": {
+            "@id": "https://shopafrica.online/#website"
+          },
+          "about": {
+            "@id": "https://shopafrica.online/#organization"
+          },
+          "primaryImageOfPage": {
+            "@type": "ImageObject",
+            "url": "https://shopafrica.online/og-default.jpg"
+          }
+        }
+      ]
+    }
+    </script>
   </head>
 
   <body>
