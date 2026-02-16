@@ -29,7 +29,7 @@ const benefits = [
   "Track sales and analytics in real-time",
 ];
 
-type AuthStep = 'form' | 'otp' | 'success';
+type AuthStep = 'form' | 'otp' | 'email-verify' | 'success';
 
 export default function Auth() {
   const [searchParams] = useSearchParams();
@@ -43,6 +43,9 @@ export default function Auth() {
   const [resendCooldown, setResendCooldown] = useState(0);
   const referralCode = searchParams.get('ref');
   
+  const [resendEmailCooldown, setResendEmailCooldown] = useState(0);
+  const [emailOtpValue, setEmailOtpValue] = useState('');
+  const [emailOtpLoading, setEmailOtpLoading] = useState(false);
   const [loginData, setLoginData] = useState({ email: "", password: "" });
   const [registerData, setRegisterData] = useState({
     shopName: "",
@@ -68,6 +71,14 @@ export default function Auth() {
       return () => clearTimeout(timer);
     }
   }, [resendCooldown]);
+
+  // Resend email verification cooldown timer
+  useEffect(() => {
+    if (resendEmailCooldown > 0) {
+      const timer = setTimeout(() => setResendEmailCooldown(resendEmailCooldown - 1), 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [resendEmailCooldown]);
 
   const formatPhoneNumber = (phone: string): string => {
     // Remove all non-digits
@@ -164,11 +175,15 @@ export default function Auth() {
     setLoading(false);
 
     if (error) {
+      let description = error.message;
+      if (error.message === "Invalid login credentials") {
+        description = "Email or password is incorrect";
+      } else if (error.message.includes("Email not confirmed")) {
+        description = "Please verify your email first. Sign up again to receive a new verification code.";
+      }
       toast({
         title: "Login failed",
-        description: error.message === "Invalid login credentials" 
-          ? "Email or password is incorrect" 
-          : error.message,
+        description,
         variant: "destructive",
       });
     } else {
@@ -194,8 +209,27 @@ export default function Auth() {
       return;
     }
 
-    // Skip OTP verification - directly create account
     setLoading(true);
+
+    // Check if shop name is already taken (case-insensitive)
+    const { data: existingShop } = await supabase
+      .from('shops')
+      .select('id')
+      .ilike('name', registerData.shopName)
+      .maybeSingle();
+
+    if (existingShop) {
+      setLoading(false);
+      setErrors({ shopName: "This shop name is already taken. Please choose a different name." });
+      toast({
+        title: "Shop name unavailable",
+        description: "A shop with this name already exists. Please choose a different name.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Skip OTP verification - directly create account
     const { error, data } = await signUp(registerData.email, registerData.password, {
       full_name: registerData.shopName,
       phone: formatPhoneNumber(registerData.phone),
@@ -246,12 +280,125 @@ export default function Auth() {
         variant: "destructive",
       });
     } else {
-      setStep('success');
+      // Send verification code via Resend
+      try {
+        const { data: otpData, error: otpError } = await supabase.functions.invoke('send-email-otp', {
+          body: { email: registerData.email },
+        });
+
+        if (otpError || !otpData?.success) {
+          console.error('Failed to send email OTP:', otpError || otpData?.error);
+          // Still proceed to the verify screen - user can resend
+        }
+      } catch (otpErr) {
+        console.error('Error sending email OTP:', otpErr);
+      }
+
+      setStep('email-verify');
+      setEmailOtpValue('');
+      setResendEmailCooldown(60);
       toast({
-        title: "Account created!",
-        description: "Welcome to ShopAfrica. Your subscription is pending activation.",
+        title: "Verification code sent!",
+        description: `We sent a 6-digit code to ${registerData.email}`,
       });
-      setTimeout(() => navigate('/dashboard'), 2000);
+    }
+  };
+
+  const handleResendVerificationEmail = async () => {
+    if (resendEmailCooldown > 0) return;
+    setLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('send-email-otp', {
+        body: { email: registerData.email },
+      });
+
+      if (error || !data?.success) {
+        toast({
+          title: "Failed to resend",
+          description: data?.error || "Could not send verification code. Please try again.",
+          variant: "destructive",
+        });
+      } else {
+        setResendEmailCooldown(60);
+        toast({
+          title: "Code resent!",
+          description: "Please check your email for the new verification code.",
+        });
+      }
+    } catch {
+      toast({
+        title: "Error",
+        description: "Something went wrong. Please try again.",
+        variant: "destructive",
+      });
+    }
+    setLoading(false);
+  };
+
+  const handleVerifyEmailOTP = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (emailOtpValue.length !== 6) {
+      toast({
+        title: "Invalid code",
+        description: "Please enter all 6 digits.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setEmailOtpLoading(true);
+
+    try {
+      // Verify OTP via our edge function (confirms email server-side)
+      const { data: verifyData, error: verifyError } = await supabase.functions.invoke('verify-email-otp', {
+        body: { email: registerData.email, otp: emailOtpValue },
+      });
+
+      if (verifyError || !verifyData?.success) {
+        setEmailOtpLoading(false);
+        const errMsg = verifyData?.error || 'Verification failed';
+        toast({
+          title: "Verification failed",
+          description: errMsg.includes("expired")
+            ? "The code has expired. Please request a new one."
+            : errMsg.includes("Invalid")
+              ? "The code you entered is incorrect. Please try again."
+              : errMsg,
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Email confirmed server-side, now sign the user in
+      const { error: signInError } = await signIn(registerData.email, registerData.password);
+
+      setEmailOtpLoading(false);
+
+      if (signInError) {
+        // Email is verified but sign-in failed - send to login
+        toast({
+          title: "Email verified! ✅",
+          description: "Please sign in with your credentials.",
+        });
+        setStep('form');
+        setIsLogin(true);
+        setLoginData({ email: registerData.email, password: '' });
+      } else {
+        setStep('success');
+        toast({
+          title: "Welcome to ShopAfrica! 🎉",
+          description: "Your email has been verified. Redirecting to your dashboard...",
+        });
+        setTimeout(() => navigate('/dashboard'), 2000);
+      }
+    } catch {
+      setEmailOtpLoading(false);
+      toast({
+        title: "Error",
+        description: "Something went wrong. Please try again.",
+        variant: "destructive",
+      });
     }
   };
 
@@ -358,6 +505,80 @@ export default function Auth() {
     setRegisterData(prev => ({ ...prev, [field]: e.target.value }));
     if (errors[field]) setErrors(prev => ({ ...prev, [field]: '' }));
   };
+
+  // Email Verification Code Step
+  if (step === 'email-verify') {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center p-4 sm:p-8">
+        <div className="w-full max-w-md space-y-8">
+          <div className="text-center">
+            <div className="h-16 w-16 mx-auto rounded-full bg-primary/10 flex items-center justify-center mb-4">
+              <Mail className="h-8 w-8 text-primary" />
+            </div>
+            <h1 className="text-2xl sm:text-3xl font-bold">Verify your email</h1>
+            <p className="mt-3 text-muted-foreground">
+              We sent a 6-digit code to
+            </p>
+            <p className="font-semibold text-foreground mt-1">{registerData.email}</p>
+          </div>
+
+          <form onSubmit={handleVerifyEmailOTP} className="space-y-6">
+            <div className="flex justify-center">
+              <InputOTP
+                value={emailOtpValue}
+                onChange={setEmailOtpValue}
+                maxLength={6}
+              >
+                <InputOTPGroup>
+                  <InputOTPSlot index={0} />
+                  <InputOTPSlot index={1} />
+                  <InputOTPSlot index={2} />
+                  <InputOTPSlot index={3} />
+                  <InputOTPSlot index={4} />
+                  <InputOTPSlot index={5} />
+                </InputOTPGroup>
+              </InputOTP>
+            </div>
+
+            <Button type="submit" size="lg" className="w-full" disabled={emailOtpLoading || emailOtpValue.length !== 6}>
+              {emailOtpLoading ? (
+                <Loader2 className="h-5 w-5 animate-spin" />
+              ) : (
+                <>
+                  Verify Email
+                  <ArrowRight className="h-5 w-5 ml-2" />
+                </>
+              )}
+            </Button>
+          </form>
+
+          <div className="text-center space-y-3">
+            <p className="text-sm text-muted-foreground">
+              Didn't receive the code?{" "}
+              {resendEmailCooldown > 0 ? (
+                <span className="text-foreground">Resend in {resendEmailCooldown}s</span>
+              ) : (
+                <button
+                  onClick={handleResendVerificationEmail}
+                  disabled={loading}
+                  className="text-primary font-semibold hover:underline"
+                >
+                  {loading ? 'Sending...' : 'Resend code'}
+                </button>
+              )}
+            </p>
+            <p className="text-xs text-muted-foreground">Check your spam folder if you don't see it</p>
+            <button
+              onClick={() => { setStep('form'); setEmailOtpValue(''); }}
+              className="text-sm text-muted-foreground hover:text-foreground"
+            >
+              ← Back to registration
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   // OTP Verification Step
   if (step === 'otp') {

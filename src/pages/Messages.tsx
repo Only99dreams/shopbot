@@ -326,7 +326,7 @@ export default function Messages() {
 
   return (
     <DashboardLayout>
-      <div className="min-h-[calc(100vh-2rem)] p-4 sm:p-6 lg:p-8">
+      <div className="min-h-[calc(100vh-5.5rem)] lg:min-h-[calc(100vh-2rem)] p-4 sm:p-6 lg:p-8">
         <div className="h-full flex flex-col lg:flex-row gap-6">
           {/* Conversations List */}
           <Card className={cn(
@@ -397,7 +397,7 @@ export default function Messages() {
 
           {/* Chat Area */}
           <Card className={cn(
-            "flex-1 shadow-card flex flex-col min-h-[calc(100vh-12rem)]",
+            "flex-1 shadow-card flex flex-col min-h-[calc(100vh-15.5rem)] lg:min-h-[calc(100vh-12rem)]",
             showMobileChat ? "flex" : "hidden lg:flex"
           )}>
             {selectedConversation ? (

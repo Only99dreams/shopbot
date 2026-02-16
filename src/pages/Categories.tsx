@@ -158,10 +158,10 @@ export default function Categories() {
 
   return (
     <DashboardLayout>
-      <div className="p-6 lg:p-8">
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-8">
+      <div className="p-4 sm:p-6 lg:p-8">
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6 sm:mb-8">
           <div>
-            <h1 className="text-2xl lg:text-3xl font-bold">Categories</h1>
+            <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold">Categories</h1>
             <p className="text-muted-foreground">Organize your products into categories</p>
           </div>
           <Dialog open={isDialogOpen} onOpenChange={(open) => {
@@ -231,35 +231,63 @@ export default function Categories() {
             </Button>
           </div>
         ) : (
-          <div className="bg-card rounded-xl border border-border overflow-hidden">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-border">
-                  <th className="text-left p-4 text-sm font-medium text-muted-foreground">Name</th>
-                  <th className="text-left p-4 text-sm font-medium text-muted-foreground">Description</th>
-                  <th className="text-left p-4 text-sm font-medium text-muted-foreground">Order</th>
-                  <th className="text-right p-4 text-sm font-medium text-muted-foreground">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {categories.map((category) => (
-                  <tr key={category.id} className="border-b border-border last:border-0 hover:bg-muted/50 transition-colors">
-                    <td className="p-4 font-medium">{category.name}</td>
-                    <td className="p-4 text-muted-foreground text-sm">{category.description || '-'}</td>
-                    <td className="p-4">{category.sort_order}</td>
-                    <td className="p-4 text-right">
+          <>
+            {/* Mobile card view */}
+            <div className="lg:hidden space-y-3">
+              {categories.map((category) => (
+                <div key={category.id} className="bg-card rounded-xl border border-border p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0 flex-1">
+                      <h3 className="font-medium truncate">{category.name}</h3>
+                      <p className="text-sm text-muted-foreground mt-1 line-clamp-2">{category.description || 'No description'}</p>
+                      <p className="text-xs text-muted-foreground mt-2">Sort order: {category.sort_order}</p>
+                    </div>
+                    <div className="flex items-center gap-1 flex-shrink-0">
                       <Button variant="ghost" size="sm" onClick={() => openEditDialog(category)}>
                         <Edit2 className="h-4 w-4" />
                       </Button>
                       <Button variant="ghost" size="sm" onClick={() => handleDelete(category)}>
                         <Trash2 className="h-4 w-4 text-destructive" />
                       </Button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Desktop table view */}
+            <div className="hidden lg:block bg-card rounded-xl border border-border overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className="border-b border-border">
+                      <th className="text-left p-4 text-sm font-medium text-muted-foreground">Name</th>
+                      <th className="text-left p-4 text-sm font-medium text-muted-foreground">Description</th>
+                      <th className="text-left p-4 text-sm font-medium text-muted-foreground">Order</th>
+                      <th className="text-right p-4 text-sm font-medium text-muted-foreground">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {categories.map((category) => (
+                      <tr key={category.id} className="border-b border-border last:border-0 hover:bg-muted/50 transition-colors">
+                        <td className="p-4 font-medium">{category.name}</td>
+                        <td className="p-4 text-muted-foreground text-sm">{category.description || '-'}</td>
+                        <td className="p-4">{category.sort_order}</td>
+                        <td className="p-4 text-right">
+                          <Button variant="ghost" size="sm" onClick={() => openEditDialog(category)}>
+                            <Edit2 className="h-4 w-4" />
+                          </Button>
+                          <Button variant="ghost" size="sm" onClick={() => handleDelete(category)}>
+                            <Trash2 className="h-4 w-4 text-destructive" />
+                          </Button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </>
         )}
       </div>
     </DashboardLayout>

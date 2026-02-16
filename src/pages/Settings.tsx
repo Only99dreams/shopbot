@@ -275,15 +275,15 @@ export default function Settings() {
 
   return (
     <DashboardLayout>
-      <div className="p-6 lg:p-8 space-y-6">
+      <div className="p-4 sm:p-6 lg:p-8 space-y-6">
         {/* Header */}
         <div>
-          <h1 className="text-2xl lg:text-3xl font-bold">Settings</h1>
+          <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold">Settings</h1>
           <p className="text-muted-foreground">Manage your account and shop settings</p>
         </div>
 
         <Tabs defaultValue="shop" className="space-y-6">
-          <TabsList className="grid w-full max-w-2xl grid-cols-6 h-auto">
+          <TabsList className="grid w-full max-w-2xl grid-cols-3 sm:grid-cols-6 h-auto gap-1">
             <TabsTrigger value="shop" className="gap-1 sm:gap-2 text-xs sm:text-sm px-2 py-2">
               <Store className="h-4 w-4 hidden sm:block" />
               Shop
