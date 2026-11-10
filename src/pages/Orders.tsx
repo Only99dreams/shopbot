@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { Link } from "react-router-dom";
 import { useMutation } from '@tanstack/react-query';
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { Button } from "@/components/ui/button";
@@ -8,6 +9,7 @@ import {
   ShoppingCart,
   Loader2,
   Eye,
+  MapPin,
   QrCode
 } from "lucide-react";
 import {
@@ -248,6 +250,11 @@ export default function Orders() {
                     <Button variant="outline" size="sm" onClick={() => setViewingOrderId(order.id)}>
                       <Eye className="h-4 w-4" />
                     </Button>
+                    <Button variant="outline" size="sm" asChild>
+                      <Link to={`/marketplace?track=${encodeURIComponent(order.order_number)}&view=shop`} aria-label="Track delivery">
+                        <MapPin className="h-4 w-4" />
+                      </Link>
+                    </Button>
                   </div>
                 </div>
               ))}
@@ -330,6 +337,11 @@ export default function Orders() {
                         <td className="p-4 text-right">
                           <Button variant="ghost" size="sm" onClick={() => setViewingOrderId(order.id)}>
                             <Eye className="h-4 w-4" />
+                          </Button>
+                          <Button variant="ghost" size="sm" asChild>
+                            <Link to={`/marketplace?track=${encodeURIComponent(order.order_number)}&view=shop`} aria-label="Track delivery">
+                              <MapPin className="h-4 w-4" />
+                            </Link>
                           </Button>
                         </td>
                       </tr>

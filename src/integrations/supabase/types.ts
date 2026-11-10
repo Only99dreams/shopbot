@@ -1,4 +1,4 @@
-﻿export type Json =
+export type Json =
   | string
   | number
   | boolean
@@ -14,6 +14,27 @@ export type Database = {
   }
   public: {
     Tables: {
+      authenticity_checks: {
+        Row: {
+          created_at: string
+          id: string
+          ip_hash: string
+          verdict: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          ip_hash: string
+          verdict: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          ip_hash?: string
+          verdict?: string
+        }
+        Relationships: []
+      }
       categories: {
         Row: {
           created_at: string
@@ -146,6 +167,10 @@ export type Database = {
           id_number: string
           id_type: string
           is_available: boolean
+          last_lat: number | null
+          last_lng: number | null
+          last_location_accuracy: number | null
+          last_location_at: string | null
           phone: string
           rating: number
           rejection_reason: string | null
@@ -171,6 +196,10 @@ export type Database = {
           id_number: string
           id_type?: string
           is_available?: boolean
+          last_lat?: number | null
+          last_lng?: number | null
+          last_location_accuracy?: number | null
+          last_location_at?: string | null
           phone: string
           rating?: number
           rejection_reason?: string | null
@@ -196,6 +225,10 @@ export type Database = {
           id_number?: string
           id_type?: string
           is_available?: boolean
+          last_lat?: number | null
+          last_lng?: number | null
+          last_location_accuracy?: number | null
+          last_location_at?: string | null
           phone?: string
           rating?: number
           rejection_reason?: string | null
@@ -536,8 +569,11 @@ export type Database = {
         Row: {
           created_at: string
           customer_id: string | null
+          delivery_address: string | null
           delivery_city: string | null
           delivery_fee: number
+          delivery_lat: number | null
+          delivery_lng: number | null
           delivery_state: string | null
           escrow_enabled: boolean | null
           id: string
@@ -551,13 +587,17 @@ export type Database = {
           status: string
           subtotal: number
           total: number
+          tracking_token: string
           updated_at: string
         }
         Insert: {
           created_at?: string
           customer_id?: string | null
+          delivery_address?: string | null
           delivery_city?: string | null
           delivery_fee?: number
+          delivery_lat?: number | null
+          delivery_lng?: number | null
           delivery_state?: string | null
           escrow_enabled?: boolean | null
           id?: string
@@ -571,13 +611,17 @@ export type Database = {
           status?: string
           subtotal: number
           total: number
+          tracking_token?: string
           updated_at?: string
         }
         Update: {
           created_at?: string
           customer_id?: string | null
+          delivery_address?: string | null
           delivery_city?: string | null
           delivery_fee?: number
+          delivery_lat?: number | null
+          delivery_lng?: number | null
           delivery_state?: string | null
           escrow_enabled?: boolean | null
           id?: string
@@ -591,6 +635,7 @@ export type Database = {
           status?: string
           subtotal?: number
           total?: number
+          tracking_token?: string
           updated_at?: string
         }
         Relationships: [
@@ -1136,7 +1181,10 @@ export type Database = {
           description: string | null
           id: string
           is_active: boolean | null
+          latitude: number | null
+          location_updated_at: string | null
           logo_url: string | null
+          longitude: number | null
           name: string
           owner_id: string
           settings: Json | null
@@ -1154,7 +1202,10 @@ export type Database = {
           description?: string | null
           id?: string
           is_active?: boolean | null
+          latitude?: number | null
+          location_updated_at?: string | null
           logo_url?: string | null
+          longitude?: number | null
           name: string
           owner_id: string
           settings?: Json | null
@@ -1172,7 +1223,10 @@ export type Database = {
           description?: string | null
           id?: string
           is_active?: boolean | null
+          latitude?: number | null
+          location_updated_at?: string | null
           logo_url?: string | null
+          longitude?: number | null
           name?: string
           owner_id?: string
           settings?: Json | null
@@ -1350,6 +1404,8 @@ export type Database = {
           p_customer_name: string
           p_customer_phone: string
           p_delivery_city?: string
+          p_delivery_lat?: number
+          p_delivery_lng?: number
           p_delivery_state?: string
           p_items: Json
           p_notes: string
@@ -1358,6 +1414,35 @@ export type Database = {
         Returns: Json
       }
       generate_redemption_code: { Args: never; Returns: string }
+      get_active_delivery_map: {
+        Args: never
+        Returns: {
+          accepted_at: string
+          agent_accuracy: number
+          agent_earning: number
+          agent_id: string
+          agent_lat: number
+          agent_lng: number
+          agent_location_at: string
+          agent_name: string
+          agent_phone: string
+          assignment_id: string
+          city: string
+          delivery_fee: number
+          destination_address: string
+          destination_lat: number
+          destination_lng: number
+          order_id: string
+          order_number: string
+          picked_up_at: string
+          shop_lat: number
+          shop_lng: number
+          shop_name: string
+          state: string
+          status: string
+          tracking_token: string
+        }[]
+      }
       get_agent_deliveries: {
         Args: never
         Returns: {
@@ -1370,13 +1455,36 @@ export type Database = {
           customer_name: string
           customer_phone: string
           delivered_at: string
+          delivery_address: string
           delivery_fee: number
+          delivery_latitude: number
+          delivery_longitude: number
           item_count: number
           items: Json
           order_id: string
           order_number: string
+          shop_latitude: number
+          shop_longitude: number
+          shop_name: string
           state: string
           status: string
+          tracking_token: string
+        }[]
+      }
+      get_agent_map_overview: {
+        Args: never
+        Returns: {
+          active_deliveries: number
+          agent_id: string
+          city: string
+          full_name: string
+          is_available: boolean
+          last_lat: number
+          last_lng: number
+          last_location_at: string
+          phone: string
+          state: string
+          vehicle_type: string
         }[]
       }
       get_delivery_commission: { Args: never; Returns: number }
@@ -1385,6 +1493,20 @@ export type Database = {
         Returns: number
       }
       get_or_create_my_referral_code: { Args: never; Returns: string }
+      get_public_shops_map: {
+        Args: { p_city?: string; p_state?: string }
+        Returns: {
+          address: string
+          city: string
+          id: string
+          latitude: number
+          logo_url: string
+          longitude: number
+          name: string
+          product_count: number
+          state: string
+        }[]
+      }
       get_shop_metrics: { Args: { p_shop_id: string }; Returns: Json }
       get_user_shop_id: { Args: { _user_id: string }; Returns: string }
       has_role: {
@@ -1420,6 +1542,10 @@ export type Database = {
         Returns: Json
       }
       track_order_by_number: { Args: { p_order_number: string }; Returns: Json }
+      update_agent_location: {
+        Args: { p_accuracy?: number; p_lat: number; p_lng: number }
+        Returns: Json
+      }
       update_delivery_status: {
         Args: { p_assignment_id: string; p_status: string }
         Returns: Json

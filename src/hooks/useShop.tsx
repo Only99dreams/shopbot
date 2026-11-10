@@ -14,6 +14,8 @@ interface Shop {
   state: string | null;
   city: string | null;
   address: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
   bank_name: string | null;
   account_number: string | null;
   account_name: string | null;
@@ -70,6 +72,8 @@ export function ShopProvider({ children }: { children: ReactNode }) {
           state: shopData.state,
           city: shopData.city,
           address: shopData.address,
+          latitude: shopData.latitude ?? null,
+          longitude: shopData.longitude ?? null,
           bank_name: shopData.bank_name ?? null,
           account_number: shopData.account_number ?? null,
           account_name: shopData.account_name ?? null,

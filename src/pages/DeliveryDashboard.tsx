@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { formatDistanceToNow } from 'date-fns';
 import {
   BadgeCheck, Bike, Clock, Loader2, MapPin, Package, Phone, Truck,
   Wallet, ArrowRight, CheckCircle2, XCircle, Banknote, Bell,
@@ -12,8 +13,10 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { NotificationBell } from '@/components/NotificationBell';
+import { LeafletMap, type MapPoint } from '@/components/map/LeafletMap';
 import { useAuth } from '@/hooks/useAuth';
 import { useDelivery, type AgentDelivery } from '@/hooks/useDelivery';
+import { useAgentLocationSharing } from '@/hooks/useAgentLocationSharing';
 import { formatNaira } from '@/lib/nigeria';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -35,12 +38,51 @@ function DeliveryCard({
   onAccept,
   onStatus,
   busy,
+  agentPosition,
 }: {
   delivery: AgentDelivery;
   onAccept: () => void;
   onStatus: (status: 'picked_up' | 'delivered' | 'cancelled') => void;
   busy: boolean;
+  agentPosition?: { lat: number; lng: number } | null;
 }) {
+  const routePoints = useMemo(() => {
+    const points: MapPoint[] = [];
+    if (delivery.shop_latitude != null && delivery.shop_longitude != null) {
+      points.push({
+        id: 'shop',
+        kind: 'shop',
+        lat: delivery.shop_latitude,
+        lng: delivery.shop_longitude,
+        label: delivery.shop_name ?? 'Pickup shop',
+        description: 'Pick the order up here',
+      });
+    }
+    if (agentPosition) {
+      points.push({
+        id: 'agent',
+        kind: 'agent',
+        lat: agentPosition.lat,
+        lng: agentPosition.lng,
+        label: 'You',
+        description: 'Your shared position',
+      });
+    }
+    if (delivery.delivery_latitude != null && delivery.delivery_longitude != null) {
+      points.push({
+        id: 'destination',
+        kind: 'destination',
+        lat: delivery.delivery_latitude,
+        lng: delivery.delivery_longitude,
+        label: 'Drop-off',
+        description: delivery.delivery_address ?? undefined,
+      });
+    }
+    return points;
+  }, [delivery, agentPosition]);
+
+  const showRoute = (delivery.status === 'accepted' || delivery.status === 'picked_up') && routePoints.length > 0;
+
   return (
     <Card>
       <CardContent className="p-5">
@@ -94,6 +136,12 @@ function DeliveryCard({
                 <span>{delivery.address}</span>
               </p>
             )}
+          </div>
+        )}
+
+        {showRoute && (
+          <div className="mt-3">
+            <LeafletMap points={routePoints} connectPoints height={220} showLegend={false} className="rounded-lg" />
           </div>
         )}
 
@@ -180,6 +228,9 @@ export default function DeliveryDashboard() {
     completed: deliveries.filter((item) => item.status === 'delivered'),
   }), [deliveries]);
 
+  const hasActiveDeliveries = grouped.active.length > 0;
+  const locationSharing = useAgentLocationSharing(isApproved && hasActiveDeliveries);
+
   if (isLoading) {
     return (
       <div className="flex min-h-screen items-center justify-center">
@@ -258,6 +309,7 @@ export default function DeliveryDashboard() {
             key={delivery.assignment_id}
             delivery={delivery}
             busy={acceptDelivery.isPending || updateStatus.isPending}
+            agentPosition={locationSharing.position}
             onAccept={() => acceptDelivery.mutate(delivery.assignment_id)}
             onStatus={(status) => updateStatus.mutate({ assignmentId: delivery.assignment_id, status })}
           />
@@ -311,6 +363,34 @@ export default function DeliveryDashboard() {
             />
           </div>
         </div>
+
+        {hasActiveDeliveries && (
+          <div
+            className={cn(
+              'mb-6 flex flex-wrap items-center justify-between gap-2 rounded-xl border px-4 py-3 text-sm',
+              locationSharing.error
+                ? 'border-amber-500/30 bg-amber-500/10 text-amber-700'
+                : 'border-green-500/30 bg-green-500/10 text-green-700',
+            )}
+          >
+            <span className="flex items-center gap-2">
+              <span
+                className={cn(
+                  'h-2 w-2 rounded-full',
+                  locationSharing.error ? 'bg-amber-500' : 'bg-green-500 animate-pulse',
+                )}
+              />
+              {locationSharing.error
+                ? locationSharing.error
+                : locationSharing.lastSharedAt
+                  ? `Sharing live location · updated ${formatDistanceToNow(locationSharing.lastSharedAt, { addSuffix: true })}`
+                  : 'Starting live location sharing...'}
+            </span>
+            {locationSharing.accuracy != null && !locationSharing.error && (
+              <span className="text-xs">GPS accuracy ±{Math.round(locationSharing.accuracy)}m</span>
+            )}
+          </div>
+        )}
 
         <div className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {[

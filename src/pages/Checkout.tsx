@@ -14,6 +14,7 @@ import { ChevronLeft, Trash2, CreditCard, Loader2, ShoppingBag, Shield, Lock, Mi
 import { toast } from 'sonner';
 import { z } from 'zod';
 import { NIGERIAN_STATES, citiesForState, formatNaira } from '@/lib/nigeria';
+import { LocationPicker, type Coordinates } from '@/components/map/LocationPicker';
 
 const checkoutSchema = z.object({
   name: z.string().min(2, 'Name must be at least 2 characters'),
@@ -41,6 +42,7 @@ function CheckoutContent() {
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isProcessing, setIsProcessing] = useState(false);
+  const [deliveryPin, setDeliveryPin] = useState<Coordinates | null>(null);
   // Persist payment success in sessionStorage to survive remounts
   const [paymentSuccess, setPaymentSuccess] = useState(() => {
     const stored = sessionStorage.getItem(`checkout-success-${shopId}`);
@@ -118,6 +120,8 @@ function CheckoutContent() {
         })),
         p_delivery_state: formData.deliveryState,
         p_delivery_city: formData.deliveryCity,
+        p_delivery_lat: deliveryPin?.lat ?? null,
+        p_delivery_lng: deliveryPin?.lng ?? null,
       });
 
       if (error) throw error;
@@ -287,7 +291,10 @@ function CheckoutContent() {
             Your order has been confirmed and the seller has been notified. You can track your order using the order number on the Marketplace page.
           </p>
           <div className="flex flex-col sm:flex-row gap-3 justify-center">
-            <Link to="/marketplace" onClick={handleNavigateAway}>
+            <Link
+              to={completedOrderNumber ? `/marketplace?track=${encodeURIComponent(completedOrderNumber)}` : '/marketplace'}
+              onClick={handleNavigateAway}
+            >
               <Button size="lg" className="rounded-full px-8">Track Order</Button>
             </Link>
             <Link to={`/shop/${shopId}`} onClick={handleNavigateAway}>
@@ -589,6 +596,14 @@ function CheckoutContent() {
                     />
                     {errors.address && <p className="text-sm text-destructive">{errors.address}</p>}
                   </div>
+                  <LocationPicker
+                    value={deliveryPin}
+                    onChange={setDeliveryPin}
+                    state={formData.deliveryState}
+                    label="Pin your delivery spot (recommended)"
+                    description="Helps the delivery agent find you and lets you follow them live."
+                    height={220}
+                  />
                   <div className="space-y-2">
                     <Label htmlFor="notes">Order Notes (Optional)</Label>
                     <Textarea

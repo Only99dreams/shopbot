@@ -27,6 +27,10 @@ export interface DeliveryAgent {
   approved_at: string | null;
   created_at: string;
   updated_at: string;
+  last_lat?: number | null;
+  last_lng?: number | null;
+  last_location_accuracy?: number | null;
+  last_location_at?: string | null;
 }
 
 export interface DeliveryWallet {
@@ -66,7 +70,15 @@ export interface AgentDelivery {
   items: { name: string; quantity: number }[];
   created_at: string;
   accepted_at: string | null;
+  picked_up_at?: string | null;
   delivered_at: string | null;
+  shop_name: string | null;
+  shop_latitude: number | null;
+  shop_longitude: number | null;
+  delivery_latitude: number | null;
+  delivery_longitude: number | null;
+  delivery_address: string | null;
+  tracking_token: string | null;
 }
 
 export interface DeliveryApplication {

@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { DynamicMeta } from '@/components/SEO/DynamicMeta';
@@ -30,14 +30,15 @@ import {
   Zap,
   TrendingDown,
   ShoppingCart,
-  CheckCircle,
-  Clock,
   Loader2,
   Truck
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ProductVerificationBadge, type VerificationDetails } from '@/components/products/ProductVerificationBadge';
 import { ProductAuthenticityChecker } from '@/components/products/ProductAuthenticityChecker';
+import { TrackedOrderPanel } from '@/components/tracking/TrackedOrderPanel';
+import { LeafletMap, type MapPoint } from '@/components/map/LeafletMap';
+import { useOrderTracking } from '@/hooks/useOrderTracking';
 import { useAuth } from '@/hooks/useAuth';
 import { useMutation } from '@tanstack/react-query';
 import { toast } from 'sonner';
@@ -74,6 +75,18 @@ interface Shop {
   product_count?: number;
 }
 
+interface PublicMapShop {
+  id: string;
+  name: string;
+  logo_url: string | null;
+  state: string | null;
+  city: string | null;
+  address: string | null;
+  latitude: number;
+  longitude: number;
+  product_count: number;
+}
+
 interface Product {
   id: string;
   name: string;
@@ -95,39 +108,23 @@ interface Product {
   };
 }
 
-interface OrderItem {
-  product_name: string;
-  quantity: number;
-  unit_price: number;
-  total_price: number;
-}
-
-interface TrackedOrder {
-  id: string;
-  order_number: string;
-  total: number;
-  status: string;
-  created_at: string;
-  redemption_confirmed?: boolean;
-  shops?: {
-    id: string;
-    name: string;
-    logo_url: string | null;
-  };
-  order_items: OrderItem[];
-}
-
 export default function Marketplace() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const initialTrack = searchParams.get('track')?.trim().toUpperCase() ?? '';
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedState, setSelectedState] = useState('All States');
   const [selectedCity, setSelectedCity] = useState('All Areas');
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [sortBy, setSortBy] = useState<'price-low' | 'price-high' | 'newest' | 'popular'>('popular');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
-  const [activeTab, setActiveTab] = useState<'products' | 'shops' | 'orders'>('products');
-  const [orderNumber, setOrderNumber] = useState('');
-  const [trackedOrder, setTrackedOrder] = useState<TrackedOrder | null>(null);
+  const [shopViewMode, setShopViewMode] = useState<'grid' | 'map'>('grid');
+  const [activeTab, setActiveTab] = useState<'products' | 'shops' | 'orders'>(initialTrack ? 'orders' : 'products');
+  const [orderNumber, setOrderNumber] = useState(initialTrack);
+  const [trackingNumber, setTrackingNumber] = useState<string | null>(initialTrack || null);
   const { user } = useAuth();
+
+  const tracking = useOrderTracking(trackingNumber);
+  const trackedOrder = tracking.data ?? null;
 
   // Reset city when state changes
   useEffect(() => {
@@ -182,6 +179,37 @@ export default function Marketplace() {
     staleTime: 0,
     refetchOnMount: true,
   });
+
+  // Fetch shops that have a map pin (public RPC — no bank/settings fields).
+  const { data: mapShops, isLoading: mapShopsLoading } = useQuery({
+    queryKey: ['public-shops-map', selectedState, selectedCity],
+    enabled: shopViewMode === 'map',
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc('get_public_shops_map', {
+        p_state: selectedState !== 'All States' ? selectedState : null,
+        p_city: selectedCity !== 'All Areas' ? selectedCity : null,
+      });
+      if (error) throw error;
+      return (data ?? []) as PublicMapShop[];
+    },
+  });
+
+  const shopMapPoints = useMemo<MapPoint[]>(() => {
+    const term = searchQuery.trim().toLowerCase();
+    return (mapShops ?? [])
+      .filter((shop) => !term || shop.name.toLowerCase().includes(term))
+      .map((shop) => ({
+        id: shop.id,
+        kind: 'shop' as const,
+        lat: shop.latitude,
+        lng: shop.longitude,
+        label: shop.name,
+        description: [
+          [shop.city, shop.state].filter(Boolean).join(', '),
+          shop.product_count === 1 ? '1 product' : `${shop.product_count} products`,
+        ].filter(Boolean).join(' · '),
+      }));
+  }, [mapShops, searchQuery]);
 
   // Fetch all products from active shops
   const { data: products, isLoading: productsLoading, refetch: refetchProducts } = useQuery({
@@ -253,7 +281,7 @@ export default function Marketplace() {
           code: 'DIRECT_CONFIRM',
           action: 'confirm_receipt',
           orderId,
-          orderNumber: trackedOrder?.order_number,
+          orderNumber: trackingNumber ?? undefined,
         },
       });
 
@@ -276,7 +304,7 @@ export default function Marketplace() {
     },
     onSuccess: () => {
       toast.success('Receipt confirmed! Seller has been credited.');
-      setTrackedOrder(prev => prev ? { ...prev, redemption_confirmed: true } : null);
+      tracking.refetch();
     },
     onError: (error: Error) => {
       console.error('Confirm receipt error:', error);
@@ -284,26 +312,38 @@ export default function Marketplace() {
     },
   });
 
-  // Track order by order number
-  const trackOrderMutation = useMutation({
-    mutationFn: async (orderNum: string) => {
-      const normalizedOrder = orderNum.trim().toUpperCase();
-      const { data, error } = await supabase.rpc('track_order_by_number', {
-        p_order_number: normalizedOrder,
-      });
+  const handleTrackOrder = () => {
+    const value = orderNumber.trim().toUpperCase();
+    if (!value) return;
+    if (value === trackingNumber) {
+      tracking.refetch();
+      return;
+    }
+    setTrackingNumber(value);
+    setSearchParams({ track: value }, { replace: true });
+  };
 
-      if (error) throw error;
-      if (!data) throw new Error('Order not found');
-      return data as unknown as TrackedOrder;
-    },
-    onSuccess: (data) => {
-      setTrackedOrder(data);
-    },
-    onError: (error: Error) => {
-      toast.error('Order not found or not eligible for tracking');
-      setTrackedOrder(null);
-    },
-  });
+  const resetTracking = () => {
+    setTrackingNumber(null);
+    setOrderNumber('');
+    const next = new URLSearchParams(searchParams);
+    next.delete('track');
+    next.delete('view');
+    setSearchParams(next, { replace: true });
+  };
+
+  useEffect(() => {
+    if (tracking.error) toast.error('Could not load that order. Please try again.');
+  }, [tracking.error]);
+
+  useEffect(() => {
+    const param = searchParams.get('track')?.trim().toUpperCase();
+    if (param && param !== trackingNumber) {
+      setTrackingNumber(param);
+      setOrderNumber(param);
+      setActiveTab('orders');
+    }
+  }, [searchParams, trackingNumber]);
 
   // Filter and sort products
   const filteredProducts = useMemo(() => {
@@ -688,7 +728,59 @@ export default function Marketplace() {
 
           {/* Shops Tab */}
           <TabsContent value="shops" className="mt-0">
-            {isLoading ? (
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+              <p className="text-sm text-muted-foreground">
+                {shopViewMode === 'map'
+                  ? `${shopMapPoints.length} shops on the map`
+                  : `${filteredShops.length} shops`}
+              </p>
+              <div className="flex items-center gap-1 rounded-lg border p-1">
+                <Button
+                  size="sm"
+                  variant={shopViewMode === 'grid' ? 'secondary' : 'ghost'}
+                  className="h-7 rounded-md px-2"
+                  onClick={() => setShopViewMode('grid')}
+                >
+                  <LayoutGrid className="mr-1.5 h-3.5 w-3.5" />
+                  List
+                </Button>
+                <Button
+                  size="sm"
+                  variant={shopViewMode === 'map' ? 'secondary' : 'ghost'}
+                  className="h-7 rounded-md px-2"
+                  onClick={() => setShopViewMode('map')}
+                >
+                  <MapPin className="mr-1.5 h-3.5 w-3.5" />
+                  Map
+                </Button>
+              </div>
+            </div>
+
+            {shopViewMode === 'map' ? (
+              mapShopsLoading ? (
+                <div className="flex justify-center py-24">
+                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                </div>
+              ) : shopMapPoints.length === 0 ? (
+                <div className="text-center py-16">
+                  <MapPin className="w-16 h-16 mx-auto text-muted-foreground mb-4" />
+                  <h3 className="text-xl font-semibold mb-2">No shops on the map yet</h3>
+                  <p className="text-muted-foreground mb-4">
+                    Shops appear here once their owners add a map pin in their settings.
+                  </p>
+                  <Button variant="outline" onClick={() => setShopViewMode('grid')}>
+                    Back to list
+                  </Button>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <LeafletMap points={shopMapPoints} height={480} />
+                  <p className="text-xs text-muted-foreground">
+                    Tap a pin to see the shop name and location. Use the location filter to narrow the map.
+                  </p>
+                </div>
+              )
+            ) : isLoading ? (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 {[...Array(6)].map((_, i) => (
                   <div key={i} className="animate-pulse p-6 bg-muted rounded-xl">
@@ -734,104 +826,69 @@ export default function Marketplace() {
           </TabsContent>
 
           <TabsContent value="orders" className="mt-0">
-            {!trackedOrder ? (
+            {!trackingNumber ? (
               // Order tracking form
               <div className="max-w-md mx-auto">
                 <div className="text-center py-16">
                   <Package className="w-16 h-16 mx-auto text-muted-foreground mb-4" />
                   <h3 className="text-xl font-semibold mb-2">Track Your Order</h3>
                   <p className="text-muted-foreground mb-6">
-                    Enter your order number to track and confirm receipt.
+                    Enter your order number to follow the delivery on the map and confirm receipt.
                   </p>
                   <div className="space-y-4">
                     <Input
                       placeholder="Enter order number (e.g., ORD-ABC123)"
                       value={orderNumber}
                       onChange={(e) => setOrderNumber(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') handleTrackOrder();
+                      }}
                       className="text-center"
                     />
-                    <Button 
-                      className="w-full" 
-                      onClick={() => trackOrderMutation.mutate(orderNumber)}
-                      disabled={!orderNumber.trim() || trackOrderMutation.isPending}
+                    <Button
+                      className="w-full"
+                      onClick={handleTrackOrder}
+                      disabled={!orderNumber.trim() || tracking.isFetching}
                     >
-                      {trackOrderMutation.isPending ? 'Tracking...' : 'Track Order'}
+                      {tracking.isFetching ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Tracking...
+                        </>
+                      ) : (
+                        'Track Order'
+                      )}
                     </Button>
                   </div>
                 </div>
               </div>
-            ) : (
-              // Show tracked order
+            ) : tracking.isLoading ? (
+              <div className="flex justify-center py-24">
+                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+              </div>
+            ) : trackedOrder ? (
               <div className="max-w-2xl mx-auto py-8">
-                <Card className="overflow-hidden">
-                  <CardContent className="p-6">
-                    <div className="flex items-center justify-between mb-4">
-                      <div className="flex items-center gap-3">
-                        <div className="w-12 h-12 rounded-full bg-muted overflow-hidden">
-                          {trackedOrder.shops?.logo_url ? (
-                            <img src={trackedOrder.shops.logo_url} alt="" className="w-full h-full object-cover" />
-                          ) : (
-                            <div className="w-full h-full flex items-center justify-center text-muted-foreground">
-                              <Store className="w-6 h-6" />
-                            </div>
-                          )}
-                        </div>
-                        <div>
-                          <h3 className="font-semibold">{trackedOrder.shops?.name}</h3>
-                          <p className="text-sm text-muted-foreground">Order #{trackedOrder.order_number}</p>
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-2xl font-bold text-primary">₦{trackedOrder.total.toLocaleString()}</p>
-                        <p className="text-sm text-muted-foreground">
-                          {new Date(trackedOrder.created_at).toLocaleDateString()}
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="space-y-3 mb-4">
-                      {trackedOrder.order_items.map((item: OrderItem, index: number) => (
-                        <div key={index} className="flex items-center justify-between py-2">
-                          <div className="flex items-center gap-3">
-                            <Package className="w-4 h-4 text-muted-foreground" />
-                            <span className="text-sm">{item.product_name}</span>
-                            <Badge variant="secondary" className="text-xs">
-                              {item.quantity}x
-                            </Badge>
-                          </div>
-                          <span className="text-sm font-medium">₦{item.total_price.toLocaleString()}</span>
-                        </div>
-                      ))}
-                    </div>
-
-                    <div className="flex gap-3">
-                      <Button 
-                        variant="outline" 
-                        className="flex-1"
-                        onClick={() => {
-                          setTrackedOrder(null);
-                          setOrderNumber('');
-                        }}
-                      >
-                        Track Another Order
-                      </Button>
-                      {!trackedOrder.redemption_confirmed && (
-                        <Button 
-                          className="flex-1"
-                          onClick={() => confirmReceiptMutation.mutate(trackedOrder.id)}
-                          disabled={confirmReceiptMutation.isPending}
-                        >
-                          {confirmReceiptMutation.isPending ? (
-                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                          ) : (
-                            <CheckCircle className="w-4 h-4 mr-2" />
-                          )}
-                          Confirm Receipt
-                        </Button>
-                      )}
-                    </div>
-                  </CardContent>
-                </Card>
+                <TrackedOrderPanel
+                  order={trackedOrder}
+                  isRefreshing={tracking.isFetching}
+                  onRefresh={() => tracking.refetch()}
+                  onReset={resetTracking}
+                  showConfirm={searchParams.get('view') !== 'shop'}
+                  onConfirm={() => confirmReceiptMutation.mutate(trackedOrder.id)}
+                  confirmPending={confirmReceiptMutation.isPending}
+                />
+              </div>
+            ) : (
+              <div className="max-w-md mx-auto text-center py-16">
+                <Package className="w-16 h-16 mx-auto text-muted-foreground mb-4" />
+                <h3 className="text-xl font-semibold mb-2">Order not found</h3>
+                <p className="text-muted-foreground mb-6">
+                  We couldn't find an order with number <span className="font-medium text-foreground">{trackingNumber}</span>.
+                  Check the number and try again.
+                </p>
+                <Button variant="outline" onClick={resetTracking}>
+                  Try another number
+                </Button>
               </div>
             )}
           </TabsContent>

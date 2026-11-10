@@ -16,6 +16,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { ShopQRCodeCard } from "@/components/shop/ShopQRCode";
+import { LocationPicker } from "@/components/map/LocationPicker";
 
 // Nigerian states for location
 const NIGERIAN_STATES = [
@@ -40,6 +41,8 @@ export default function Settings() {
     state: "",
     city: "",
     address: "",
+    latitude: null as number | null,
+    longitude: null as number | null,
     bank_name: "",
     account_number: "",
     account_name: "",
@@ -74,6 +77,8 @@ export default function Settings() {
         state: shop.state || "",
         city: shop.city || "",
         address: shop.address || "",
+        latitude: shop.latitude ?? null,
+        longitude: shop.longitude ?? null,
         bank_name: shop.bank_name || "",
         account_number: shop.account_number || "",
         account_name: shop.account_name || "",
@@ -432,6 +437,23 @@ export default function Settings() {
                         placeholder="Street address or landmark"
                       />
                     </div>
+
+                    <LocationPicker
+                      className="mt-4"
+                      value={
+                        shopData.latitude != null && shopData.longitude != null
+                          ? { lat: shopData.latitude, lng: shopData.longitude }
+                          : null
+                      }
+                      onChange={(value) => setShopData({
+                        ...shopData,
+                        latitude: value?.lat ?? null,
+                        longitude: value?.lng ?? null,
+                      })}
+                      state={shopData.state}
+                      label="Map pin (optional)"
+                      description="Drop a pin so buyers and delivery agents can find your shop."
+                    />
                   </div>
 
                   <div className="space-y-2">

@@ -52,6 +52,52 @@ export const NIGERIAN_CITIES: Record<string, string[]> = {
   Zamfara: ['Gusau', 'Kaura Namoda', 'Talata Mafara', 'Anka', 'Zurmi'],
 };
 
+/** Approximate state capitals, used to centre maps when exact coordinates are missing. */
+export const NIGERIAN_STATE_CENTERS: Record<string, { lat: number; lng: number }> = {
+  Abia: { lat: 5.4527, lng: 7.5248 },
+  Adamawa: { lat: 9.3265, lng: 12.3984 },
+  'Akwa Ibom': { lat: 5.0377, lng: 7.9128 },
+  Anambra: { lat: 6.2209, lng: 6.937 },
+  Bauchi: { lat: 10.3103, lng: 9.8439 },
+  Bayelsa: { lat: 4.7719, lng: 6.0699 },
+  Benue: { lat: 7.7322, lng: 8.5391 },
+  Borno: { lat: 11.8311, lng: 13.151 },
+  'Cross River': { lat: 4.9757, lng: 8.3417 },
+  Delta: { lat: 6.198, lng: 6.7306 },
+  Ebonyi: { lat: 6.3249, lng: 8.1137 },
+  Edo: { lat: 6.335, lng: 5.6037 },
+  Ekiti: { lat: 7.6211, lng: 5.2214 },
+  Enugu: { lat: 6.4584, lng: 7.5464 },
+  FCT: { lat: 9.0765, lng: 7.3986 },
+  Gombe: { lat: 10.2791, lng: 11.1673 },
+  Imo: { lat: 5.484, lng: 7.0351 },
+  Jigawa: { lat: 11.6971, lng: 9.3407 },
+  Kaduna: { lat: 10.5105, lng: 7.4165 },
+  Kano: { lat: 12.0022, lng: 8.5919 },
+  Katsina: { lat: 12.9908, lng: 7.6018 },
+  Kebbi: { lat: 12.4539, lng: 4.1975 },
+  Kogi: { lat: 7.8023, lng: 6.7333 },
+  Kwara: { lat: 8.4966, lng: 4.5421 },
+  Lagos: { lat: 6.5244, lng: 3.3792 },
+  Nasarawa: { lat: 8.4905, lng: 8.5201 },
+  Niger: { lat: 9.5836, lng: 6.5463 },
+  Ogun: { lat: 7.1557, lng: 3.3451 },
+  Ondo: { lat: 7.2571, lng: 5.2058 },
+  Osun: { lat: 7.7669, lng: 4.5554 },
+  Oyo: { lat: 7.3775, lng: 3.947 },
+  Plateau: { lat: 9.8965, lng: 8.8583 },
+  Rivers: { lat: 4.8156, lng: 7.0498 },
+  Sokoto: { lat: 13.0059, lng: 5.2476 },
+  Taraba: { lat: 8.8833, lng: 11.3667 },
+  Yobe: { lat: 11.7479, lng: 11.966 },
+  Zamfara: { lat: 12.1704, lng: 6.6641 },
+};
+
+export function stateCenter(state: string | null | undefined) {
+  if (!state) return null;
+  return NIGERIAN_STATE_CENTERS[state] ?? null;
+}
+
 export function citiesForState(state: string | null | undefined): string[] {
   if (!state) return [];
   return NIGERIAN_CITIES[state] ?? [];

@@ -1,4 +1,6 @@
 import { useMemo, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { formatDistanceToNow } from 'date-fns';
 import {
   Ban, Check, FileText, Loader2, MapPin, Plus,
   RefreshCw, Trash2, Truck, X,
@@ -14,6 +16,7 @@ import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { LeafletMap, type MapPoint } from '@/components/map/LeafletMap';
 import { useDeliveryAdmin, type DeliveryAgent } from '@/hooks/useDelivery';
 import { supabase } from '@/integrations/supabase/client';
 import { formatNaira, NIGERIAN_STATES } from '@/lib/nigeria';
@@ -45,12 +48,292 @@ interface DeliveryFee {
   is_active: boolean;
 }
 
+interface ActiveDeliveryMapRow {
+  assignment_id: string;
+  order_id: string;
+  order_number: string;
+  status: 'accepted' | 'picked_up';
+  state: string;
+  city: string;
+  agent_id: string | null;
+  agent_name: string | null;
+  agent_phone: string | null;
+  agent_lat: number | null;
+  agent_lng: number | null;
+  agent_accuracy: number | null;
+  agent_location_at: string | null;
+  shop_name: string | null;
+  shop_lat: number | null;
+  shop_lng: number | null;
+  destination_lat: number | null;
+  destination_lng: number | null;
+  destination_address: string | null;
+}
+
+interface AgentMapRow {
+  agent_id: string;
+  full_name: string;
+  phone: string;
+  state: string;
+  city: string;
+  vehicle_type: string;
+  is_available: boolean;
+  last_lat: number | null;
+  last_lng: number | null;
+  last_location_at: string | null;
+  active_deliveries: number | string;
+}
+
+const STALE_AFTER_MS = 5 * 60 * 1000;
+
+function isStale(timestamp: string | null) {
+  if (!timestamp) return true;
+  return Date.now() - new Date(timestamp).getTime() > STALE_AFTER_MS;
+}
+
 const statusStyles: Record<DeliveryAgent['status'], string> = {
   pending: 'border-amber-500/30 bg-amber-500/10 text-amber-600',
   approved: 'border-green-500/30 bg-green-500/10 text-green-600',
   rejected: 'border-destructive/30 bg-destructive/10 text-destructive',
   suspended: 'border-orange-500/30 bg-orange-500/10 text-orange-600',
 };
+
+function AdminLiveMap() {
+  const [layer, setLayer] = useState<'deliveries' | 'agents'>('deliveries');
+  const [selectedAssignment, setSelectedAssignment] = useState('all');
+
+  const deliveriesQuery = useQuery({
+    queryKey: ['admin-live-deliveries'],
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc('get_active_delivery_map');
+      if (error) throw error;
+      return (data ?? []) as ActiveDeliveryMapRow[];
+    },
+    refetchInterval: 15000,
+  });
+
+  const agentsQuery = useQuery({
+    queryKey: ['admin-map-agents'],
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc('get_agent_map_overview');
+      if (error) throw error;
+      return (data ?? []) as AgentMapRow[];
+    },
+    refetchInterval: 15000,
+  });
+
+  const activeDeliveries = deliveriesQuery.data ?? [];
+  const mapAgents = agentsQuery.data ?? [];
+
+  const visibleDeliveries = useMemo(
+    () => (selectedAssignment === 'all'
+      ? activeDeliveries
+      : activeDeliveries.filter((row) => row.assignment_id === selectedAssignment)),
+    [activeDeliveries, selectedAssignment],
+  );
+
+  const deliveryPoints = useMemo<MapPoint[]>(() => {
+    const points: MapPoint[] = [];
+    for (const row of visibleDeliveries) {
+      if (row.agent_lat != null && row.agent_lng != null) {
+        points.push({
+          id: `agent-${row.assignment_id}`,
+          kind: 'agent',
+          lat: row.agent_lat,
+          lng: row.agent_lng,
+          label: row.agent_name ?? 'Delivery agent',
+          description: `${row.order_number} · ${row.status === 'picked_up' ? 'On the way' : 'Assigned'}`,
+          accuracy: row.agent_accuracy,
+          stale: isStale(row.agent_location_at),
+        });
+      }
+      if (row.shop_lat != null && row.shop_lng != null) {
+        points.push({
+          id: `shop-${row.assignment_id}`,
+          kind: 'shop',
+          lat: row.shop_lat,
+          lng: row.shop_lng,
+          label: row.shop_name ?? 'Shop',
+          description: `Pickup · ${row.order_number}`,
+        });
+      }
+      if (row.destination_lat != null && row.destination_lng != null) {
+        points.push({
+          id: `destination-${row.assignment_id}`,
+          kind: 'destination',
+          lat: row.destination_lat,
+          lng: row.destination_lng,
+          label: `Drop-off · ${row.order_number}`,
+          description: row.destination_address ?? undefined,
+        });
+      }
+    }
+    return points;
+  }, [visibleDeliveries]);
+
+  const agentPoints = useMemo<MapPoint[]>(() => mapAgents
+    .filter((agent) => agent.last_lat != null && agent.last_lng != null)
+    .map((agent) => ({
+      id: `overview-${agent.agent_id}`,
+      kind: 'agent' as const,
+      lat: agent.last_lat!,
+      lng: agent.last_lng!,
+      label: agent.full_name,
+      description: [
+        `${agent.city || 'Unknown city'}, ${agent.state}`,
+        agent.is_available ? 'Available' : 'Offline',
+        Number(agent.active_deliveries) > 0 ? `${agent.active_deliveries} active` : 'No active jobs',
+      ].join(' · '),
+      stale: isStale(agent.last_location_at),
+    })), [mapAgents]);
+
+  const points = layer === 'deliveries' ? deliveryPoints : agentPoints;
+  const isFetching = deliveriesQuery.isFetching || agentsQuery.isFetching;
+  const error = deliveriesQuery.error || agentsQuery.error;
+  const sharingAgents = mapAgents.filter((agent) => agent.last_lat != null && agent.last_lng != null).length;
+  const onlineAgents = mapAgents.filter((agent) => agent.is_available).length;
+
+  const refresh = () => {
+    void deliveriesQuery.refetch();
+    void agentsQuery.refetch();
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <p className="font-semibold">Live delivery map</p>
+          <p className="text-sm text-muted-foreground">
+            {activeDeliveries.length} active {activeDeliveries.length === 1 ? 'delivery' : 'deliveries'} ·{' '}
+            {sharingAgents} agents sharing location · {onlineAgents} online · refreshes every 15s
+          </p>
+        </div>
+        <Button variant="outline" size="sm" onClick={refresh} disabled={isFetching}>
+          <RefreshCw className={cn('mr-1.5 h-4 w-4', isFetching && 'animate-spin')} /> Refresh
+        </Button>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="flex items-center gap-1 rounded-lg border p-1">
+          <Button
+            size="sm"
+            variant={layer === 'deliveries' ? 'secondary' : 'ghost'}
+            className="h-7 rounded-md px-2"
+            onClick={() => setLayer('deliveries')}
+          >
+            Active deliveries
+          </Button>
+          <Button
+            size="sm"
+            variant={layer === 'agents' ? 'secondary' : 'ghost'}
+            className="h-7 rounded-md px-2"
+            onClick={() => setLayer('agents')}
+          >
+            All agents
+          </Button>
+        </div>
+        {layer === 'deliveries' && activeDeliveries.length > 1 && (
+          <Select value={selectedAssignment} onValueChange={setSelectedAssignment}>
+            <SelectTrigger className="h-9 w-[260px]">
+              <SelectValue placeholder="All active deliveries" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All active deliveries</SelectItem>
+              {activeDeliveries.map((row) => (
+                <SelectItem key={row.assignment_id} value={row.assignment_id}>
+                  {row.order_number} · {row.agent_name ?? 'Unassigned'}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
+      </div>
+
+      {error && (
+        <div className="rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+          Could not load live delivery data. {error instanceof Error ? error.message : ''}
+        </div>
+      )}
+
+      {deliveriesQuery.isLoading || agentsQuery.isLoading ? (
+        <div className="flex justify-center py-24">
+          <Loader2 className="h-7 w-7 animate-spin text-primary" />
+        </div>
+      ) : points.length === 0 ? (
+        <Card>
+          <CardContent className="p-10 text-center text-muted-foreground">
+            {layer === 'deliveries'
+              ? 'No agents are sharing a location for active deliveries right now.'
+              : 'No delivery agents have shared a location yet.'}
+          </CardContent>
+        </Card>
+      ) : (
+        <LeafletMap
+          points={points}
+          height={460}
+          connectPoints={layer === 'deliveries' && selectedAssignment !== 'all'}
+        />
+      )}
+
+      {layer === 'deliveries' && activeDeliveries.length > 0 && (
+        <div className="space-y-2">
+          {activeDeliveries.map((row) => {
+            const stale = isStale(row.agent_location_at);
+            return (
+              <Card key={row.assignment_id}>
+                <CardContent className="flex flex-wrap items-center justify-between gap-3 p-4">
+                  <div>
+                    <p className="flex flex-wrap items-center gap-2 text-sm font-medium">
+                      {row.order_number}
+                      <Badge variant="outline" className="rounded-full capitalize">{row.status.replace('_', ' ')}</Badge>
+                      {stale && <Badge variant="outline" className="rounded-full border-amber-500/30 bg-amber-500/10 text-amber-600">stale GPS</Badge>}
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      {row.agent_name ?? 'No agent'}{row.agent_phone ? ` · ${row.agent_phone}` : ''} · {row.city}, {row.state}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {row.agent_location_at
+                        ? `GPS updated ${formatDistanceToNow(new Date(row.agent_location_at), { addSuffix: true })}`
+                        : 'Agent has not shared GPS yet'}
+                      {row.destination_address ? ` · ${row.destination_address}` : ''}
+                    </p>
+                  </div>
+                  <Button variant="outline" size="sm" asChild>
+                    <a href={`/marketplace?track=${encodeURIComponent(row.order_number)}`} target="_blank" rel="noreferrer">
+                      Open tracking
+                    </a>
+                  </Button>
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
+      )}
+
+      {layer === 'agents' && mapAgents.length > 0 && (
+        <div className="grid gap-2 sm:grid-cols-2">
+          {mapAgents.slice(0, 12).map((agent) => (
+            <div key={agent.agent_id} className="flex items-center justify-between rounded-xl border p-3 text-sm">
+              <div>
+                <p className="font-medium">{agent.full_name}</p>
+                <p className="text-xs text-muted-foreground">
+                  {agent.city}, {agent.state} · {Number(agent.active_deliveries)} active
+                </p>
+              </div>
+              <span className={cn('text-xs', agent.last_lat != null && !isStale(agent.last_location_at) ? 'text-green-600' : 'text-muted-foreground')}>
+                {agent.last_lat == null
+                  ? 'No GPS yet'
+                  : isStale(agent.last_location_at)
+                    ? 'Last seen earlier'
+                    : 'Live'}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function AdminDeliveryAgents() {
   const { agents, payouts, fees, isLoading, reviewAgent, reviewPayout, saveFee, deleteFee } = useDeliveryAdmin();
@@ -119,10 +402,11 @@ export default function AdminDeliveryAgents() {
         </div>
 
         <Tabs defaultValue="agents">
-          <TabsList className="mb-4 grid w-full max-w-lg grid-cols-3">
+          <TabsList className="mb-4 grid w-full max-w-2xl grid-cols-4">
             <TabsTrigger value="agents">Agents</TabsTrigger>
             <TabsTrigger value="payouts">Payouts {stats.pendingPayouts > 0 && `(${stats.pendingPayouts})`}</TabsTrigger>
             <TabsTrigger value="fees">Delivery fees</TabsTrigger>
+            <TabsTrigger value="live">Live map</TabsTrigger>
           </TabsList>
 
           <TabsContent value="agents">
@@ -339,6 +623,10 @@ export default function AdminDeliveryAgents() {
                 )}
               </CardContent>
             </Card>
+          </TabsContent>
+
+          <TabsContent value="live">
+            <AdminLiveMap />
           </TabsContent>
         </Tabs>
       </div>
