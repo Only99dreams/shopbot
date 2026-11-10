@@ -10,6 +10,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { DynamicMeta } from '@/components/SEO/DynamicMeta';
+import { ProductVerificationBadge, type VerificationDetails } from '@/components/products/ProductVerificationBadge';
 
 function ProductDetailContent() {
   const { shopId, productId } = useParams<{ shopId: string; productId: string }>();
@@ -160,6 +161,9 @@ function ProductDetailContent() {
   }
 
   const images = product.images || [];
+  const categoryName = (product.categories as unknown as { name?: string } | null)?.name;
+  const verificationStatus = product.verification_status as string | null;
+  const verificationDetails = (product.verification_details ?? null) as VerificationDetails | null;
 
   const handleShare = async () => {
     try {
@@ -208,7 +212,7 @@ function ProductDetailContent() {
           price: product.price,
           currency: 'NGN',
           availability: isOutOfStock ? 'OutOfStock' : 'InStock',
-          category: (product as any).categories?.name || undefined,
+          category: categoryName || undefined,
           brand: shop?.name || undefined,
           sku: product.id,
           ratingValue: sellerRating?.avg ?? undefined,
@@ -325,11 +329,16 @@ function ProductDetailContent() {
           <div className="space-y-6">
             {/* Category & Rating */}
             <div className="flex items-center gap-3 flex-wrap">
-              {product.categories && (
+              {categoryName && (
                 <Badge variant="secondary" className="text-xs">
-                  {(product.categories as { name: string }).name}
+                  {categoryName}
                 </Badge>
               )}
+              <ProductVerificationBadge
+                status={verificationStatus}
+                details={verificationDetails}
+                compact
+              />
               <div className="flex items-center gap-1 text-sm text-muted-foreground">
                 <Star className="w-4 h-4 fill-yellow-400 text-yellow-400" />
                 <span>4.8</span>
@@ -356,6 +365,28 @@ function ProductDetailContent() {
             {product.description && (
               <div className="prose prose-sm max-w-none">
                 <p className="text-muted-foreground leading-relaxed whitespace-pre-wrap">{product.description}</p>
+              </div>
+            )}
+
+            {/* NAFDAC verification */}
+            {verificationStatus && verificationStatus !== 'unverified' && (
+              <div
+                className={cn(
+                  'rounded-xl border p-4 text-sm',
+                  verificationStatus === 'verified'
+                    ? 'border-green-500/30 bg-green-500/5'
+                    : 'border-destructive/30 bg-destructive/5',
+                )}
+              >
+                <ProductVerificationBadge
+                  status={verificationStatus}
+                  details={verificationDetails}
+                />
+                <p className="mt-2 text-muted-foreground">
+                  {verificationStatus === 'verified'
+                    ? 'This product was found as an active registration in the official NAFDAC Greenbook.'
+                    : 'This NAFDAC number could not be confirmed as an active registration. Please buy with caution and report suspicious products.'}
+                </p>
               </div>
             )}
 
@@ -495,13 +526,13 @@ export default function ProductDetail() {
 }
 
 // RatingForm component
-function RatingForm({ shop }: { shop: any }) {
+function RatingForm({ shop }: { shop: { owner_id?: string | null } | null }) {
   const [rating, setRating] = useState(5);
   const [review, setReview] = useState('');
 
   const submitRating = async () => {
     const { data: userData } = await supabase.auth.getUser();
-    const buyerId = userData?.data?.user?.id;
+    const buyerId = userData?.user?.id;
     if (!shop?.owner_id) return toast.error('Invalid seller');
 
     const { error } = await supabase.from('seller_ratings').insert({

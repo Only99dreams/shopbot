@@ -9,16 +9,19 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { ChevronLeft, Trash2, CreditCard, Loader2, ShoppingBag, Shield, Lock, Minus, Plus, CheckCircle } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { ChevronLeft, Trash2, CreditCard, Loader2, ShoppingBag, Shield, Lock, Minus, Plus, CheckCircle, Truck } from 'lucide-react';
 import { toast } from 'sonner';
 import { z } from 'zod';
-import { cn } from '@/lib/utils';
+import { NIGERIAN_STATES, citiesForState, formatNaira } from '@/lib/nigeria';
 
 const checkoutSchema = z.object({
   name: z.string().min(2, 'Name must be at least 2 characters'),
   phone: z.string().min(10, 'Please enter a valid phone number'),
   email: z.string().email('Please enter a valid email').optional().or(z.literal('')),
   address: z.string().min(10, 'Please enter a complete address'),
+  deliveryState: z.string().min(2, 'Select your delivery state'),
+  deliveryCity: z.string().min(2, 'Enter your delivery city or area'),
   notes: z.string().optional()
 });
 
@@ -32,6 +35,8 @@ function CheckoutContent() {
     phone: '',
     email: '',
     address: '',
+    deliveryState: '',
+    deliveryCity: '',
     notes: ''
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -79,61 +84,59 @@ function CheckoutContent() {
   // Check if subscription is active OR shop is_active (legacy support)
   const isSubscriptionActive = subscription?.status === 'active' || shop?.is_active === true;
 
+  // Delivery is priced by the platform per state/city. The database is the
+  // source of truth; this is only a preview before checkout.
+  const { data: deliveryFeeValue } = useQuery({
+    queryKey: ['delivery-fee', formData.deliveryState, formData.deliveryCity],
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc('get_delivery_fee', {
+        p_state: formData.deliveryState,
+        p_city: formData.deliveryCity || null,
+      });
+      if (error) throw error;
+      return Number(data ?? 0);
+    },
+    enabled: !!formData.deliveryState,
+  });
+
+  const deliveryFee = Number(deliveryFeeValue ?? 0);
+  const orderTotal = getTotal() + deliveryFee;
+
   const createOrder = useMutation({
     mutationFn: async () => {
-      // Create customer if not exists
-      const { data: customer, error: customerError } = await supabase
-        .from('customers')
-        .upsert({
-          shop_id: shopId!,
-          phone: formData.phone,
-          name: formData.name,
-          email: formData.email || null
-        }, { onConflict: 'phone,shop_id' })
-        .select()
-        .single();
+      // The database computes prices, totals and the order number server-side.
+      const { data, error } = await supabase.rpc('create_order', {
+        p_shop_id: shopId!,
+        p_customer_name: formData.name,
+        p_customer_phone: formData.phone,
+        p_customer_email: formData.email || null,
+        p_address: formData.address,
+        p_notes: formData.notes || null,
+        p_items: items.map((item) => ({
+          product_id: item.id,
+          quantity: item.quantity,
+        })),
+        p_delivery_state: formData.deliveryState,
+        p_delivery_city: formData.deliveryCity,
+      });
 
-      if (customerError) throw customerError;
+      if (error) throw error;
 
-      // Generate order number
-      const orderNumber = `ORD-${Date.now().toString(36).toUpperCase()}`;
+      const result = data as {
+        order_id?: string;
+        order_number?: string;
+        customer_id?: string;
+        total?: number;
+      } | null;
 
-      // Create order
-      const { data: order, error: orderError } = await supabase
-        .from('orders')
-        .insert({
-          shop_id: shopId!,
-          customer_id: customer.id,
-          order_number: orderNumber,
-          subtotal: getTotal(),
-          total: getTotal(),
-          notes: `${formData.address}${formData.notes ? `\n\nNotes: ${formData.notes}` : ''}`,
-          status: 'pending',
-          payment_status: 'unpaid',
-          payment_method: 'flutterwave'
-        })
-        .select()
-        .single();
+      if (!result?.order_id || !result?.order_number) {
+        throw new Error('Failed to create order');
+      }
 
-      if (orderError) throw orderError;
-
-      // Create order items
-      const orderItems = items.map(item => ({
-        order_id: order.id,
-        product_id: item.id,
-        product_name: item.name,
-        quantity: item.quantity,
-        unit_price: item.price,
-        total_price: item.price * item.quantity
-      }));
-
-      const { error: itemsError } = await supabase
-        .from('order_items')
-        .insert(orderItems);
-
-      if (itemsError) throw itemsError;
-
-      return { order, orderNumber, customer };
+      return {
+        orderId: result.order_id,
+        orderNumber: result.order_number,
+      };
     }
   });
 
@@ -145,7 +148,6 @@ function CheckoutContent() {
         body: {
           orderId,
           email: formData.email || `${formData.phone}@customer.shopnaija.com`,
-          amount: getTotal(),
           callbackUrl
         }
       });
@@ -158,7 +160,7 @@ function CheckoutContent() {
       } else {
         throw new Error(data.error || 'Failed to initialize payment');
       }
-    } catch (error: any) {
+    } catch (error) {
       console.error('Flutterwave error:', error);
       toast.error('Payment initialization failed. Please try again.');
       setIsProcessing(false);
@@ -174,7 +176,13 @@ function CheckoutContent() {
       setIsProcessing(true);
 
       const result = await createOrder.mutateAsync();
-      await handleFlutterwaveCheckout(result.order.id);
+
+      // Persist the order number before redirecting to the payment provider so
+      // it survives the round-trip (guest buyers cannot read orders via RLS).
+      sessionStorage.setItem(`checkout-order-${shopId}`, result.orderNumber);
+      setCompletedOrderNumber(result.orderNumber);
+
+      await handleFlutterwaveCheckout(result.orderId);
     } catch (error) {
       if (error instanceof z.ZodError) {
         const newErrors: Record<string, string> = {};
@@ -226,18 +234,10 @@ function CheckoutContent() {
         setVerifyError(msg);
         toast.error(msg);
       } else {
-        // Get the order number from tx_ref or meta (format: SHOPAF_{orderId}_{timestamp})
-        const orderId = data.order_id || callbackTxRef?.split('_')[1];
-        let orderNum = null;
-        if (orderId) {
-          const { data: orderData } = await supabase
-            .from('orders')
-            .select('order_number')
-            .eq('id', orderId)
-            .maybeSingle();
-          if (orderData) orderNum = orderData.order_number;
-        }
-        
+        // Order number was persisted when the order was created. Guests cannot
+        // read orders directly (RLS), so do not query the table here.
+        const orderNum = sessionStorage.getItem(`checkout-order-${shopId}`);
+
         console.log('Payment verified successfully, clearing cart and showing success screen');
         // Persist success state to sessionStorage to survive remounts
         sessionStorage.setItem(`checkout-success-${shopId}`, 'true');
@@ -467,13 +467,21 @@ function CheckoutContent() {
                   </div>
                   <div className="flex justify-between text-sm">
                     <span className="text-muted-foreground">Delivery</span>
-                    <span className="text-green-600">To be confirmed</span>
+                    {formData.deliveryState ? (
+                      <span>{formatNaira(deliveryFee)}</span>
+                    ) : (
+                      <span className="text-muted-foreground">Select your state</span>
+                    )}
                   </div>
                   <div className="h-px bg-border my-2" />
                   <div className="flex justify-between text-lg font-bold">
                     <span>Total</span>
-                    <span className="text-primary">₦{getTotal().toLocaleString()}</span>
+                    <span className="text-primary">{formatNaira(orderTotal)}</span>
                   </div>
+                  <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <Truck className="h-3.5 w-3.5" />
+                    Delivery fee is set by ShopAfrica based on your location.
+                  </p>
                 </div>
               </CardContent>
             </Card>
@@ -533,6 +541,42 @@ function CheckoutContent() {
                 {/* Delivery Info */}
                 <div className="space-y-4 pt-4 border-t">
                   <h3 className="font-medium text-sm text-muted-foreground uppercase tracking-wide">Delivery Address</h3>
+                  <div className="grid sm:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>State *</Label>
+                      <Select
+                        value={formData.deliveryState}
+                        onValueChange={(value) => setFormData(prev => ({ ...prev, deliveryState: value, deliveryCity: '' }))}
+                      >
+                        <SelectTrigger className="rounded-xl h-11">
+                          <SelectValue placeholder="Select state" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {NIGERIAN_STATES.map((state) => (
+                            <SelectItem key={state} value={state}>{state}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      {errors.deliveryState && <p className="text-sm text-destructive">{errors.deliveryState}</p>}
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="deliveryCity">City / Area *</Label>
+                      <Input
+                        id="deliveryCity"
+                        list="checkout-cities"
+                        value={formData.deliveryCity}
+                        onChange={(e) => setFormData(prev => ({ ...prev, deliveryCity: e.target.value }))}
+                        placeholder="e.g. Ikeja"
+                        className="rounded-xl h-11"
+                      />
+                      <datalist id="checkout-cities">
+                        {citiesForState(formData.deliveryState).map((city) => (
+                          <option key={city} value={city} />
+                        ))}
+                      </datalist>
+                      {errors.deliveryCity && <p className="text-sm text-destructive">{errors.deliveryCity}</p>}
+                    </div>
+                  </div>
                   <div className="space-y-2">
                     <Label htmlFor="address">Full Address *</Label>
                     <Textarea
@@ -595,7 +639,7 @@ function CheckoutContent() {
                   ) : (
                     <>
                       <CreditCard className="mr-2 h-5 w-5" />
-                      Pay ₦{getTotal().toLocaleString()}
+                      Pay {formatNaira(orderTotal)}
                     </>
                   )}
                 </Button>

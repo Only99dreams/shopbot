@@ -43,16 +43,12 @@ export default function Referrals() {
     }
   }, [user?.id]);
 
-  const generateReferralCode = (): string => {
-    const seed = `${user?.id ?? ''}${Date.now()}${Math.random()}`;
-    return btoa(seed)
-      .replace(/[^a-zA-Z0-9]/g, '')
-      .toUpperCase()
-      .slice(0, 8);
-  };
-
   const ensureReferralCode = async (): Promise<ReferralCode | null> => {
     if (!user?.id) return null;
+
+    // Referral codes are provisioned server-side (signup trigger + RPC).
+    const { error: ensureError } = await supabase.rpc('get_or_create_my_referral_code');
+    if (ensureError) throw ensureError;
 
     const { data: codeData, error: codeError } = await supabase
       .from("referral_codes")
@@ -61,25 +57,7 @@ export default function Referrals() {
       .maybeSingle();
 
     if (codeError) throw codeError;
-    if (codeData) return codeData as ReferralCode;
-
-    for (let attempt = 0; attempt < 3; attempt += 1) {
-      const code = generateReferralCode();
-      const { data: createdCode, error: createError } = await supabase
-        .from("referral_codes")
-        .insert({ user_id: user.id, code })
-        .select("*")
-        .single();
-
-      if (!createError && createdCode) return createdCode as ReferralCode;
-
-      const message = String(createError?.message || '').toLowerCase();
-      if (!message.includes('duplicate') && !message.includes('unique')) {
-        throw createError;
-      }
-    }
-
-    throw new Error('Unable to generate referral code');
+    return (codeData as ReferralCode) ?? null;
   };
 
   const fetchReferralData = async () => {

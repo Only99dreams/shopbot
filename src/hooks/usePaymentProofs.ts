@@ -73,14 +73,15 @@ export function useCreatePaymentProof() {
       customer_name?: string;
       customer_phone?: string;
     }) => {
-      const { data, error } = await supabase
+      // Do not ask for the inserted row back: guest (anon) buyers are allowed
+      // to insert an order proof but not to SELECT payment_proofs, and a
+      // RETURNING clause would make the whole insert fail under RLS.
+      const { error } = await supabase
         .from('payment_proofs')
-        .insert(proof)
-        .select()
-        .single();
+        .insert(proof);
 
       if (error) throw error;
-      return data;
+      return null;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['payment-proofs'] });

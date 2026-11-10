@@ -5,6 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { useCart } from '@/hooks/useCart';
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
+import { ProductVerificationBadge, type VerificationDetails } from '@/components/products/ProductVerificationBadge';
 
 interface StorefrontProductCardProps {
   id: string;
@@ -14,6 +15,8 @@ interface StorefrontProductCardProps {
   image?: string | null;
   shopId: string;
   stockQuantity?: number | null;
+  verificationStatus?: string | null;
+  verificationDetails?: VerificationDetails | null;
 }
 
 export function StorefrontProductCard({
@@ -23,7 +26,9 @@ export function StorefrontProductCard({
   compareAtPrice,
   image,
   shopId,
-  stockQuantity
+  stockQuantity,
+  verificationStatus,
+  verificationDetails,
 }: StorefrontProductCardProps) {
   const { addItem, items } = useCart();
   const [isLiked, setIsLiked] = useState(false);
@@ -153,6 +158,16 @@ export function StorefrontProductCard({
           <h3 className="font-semibold text-sm sm:text-base line-clamp-2 mb-2 group-hover:text-primary transition-colors leading-tight">
             {name}
           </h3>
+
+          {verificationStatus && verificationStatus !== 'unverified' && (
+            <div className="mb-2">
+              <ProductVerificationBadge
+                status={verificationStatus}
+                details={verificationDetails}
+                compact
+              />
+            </div>
+          )}
           
           <div className="mt-auto flex items-end justify-between gap-2">
             <div className="flex flex-col">

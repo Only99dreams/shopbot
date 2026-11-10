@@ -21,6 +21,7 @@ import { useMutation } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { Card, CardContent } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { type VerificationDetails } from '@/components/products/ProductVerificationBadge';
 
 function ShopContent() {
   const { shopId } = useParams<{ shopId: string }>();
@@ -175,6 +176,9 @@ function ShopContent() {
           payment_status,
           redemption_confirmed,
           created_at,
+          customers!inner (
+            user_id
+          ),
           order_items (
             product_name,
             quantity,
@@ -182,7 +186,7 @@ function ShopContent() {
             total_price
           )
         `)
-        .eq('customer_id', user.id)
+        .eq('customers.user_id', user.id)
         .eq('shop_id', shopId)
         .eq('payment_status', 'paid')
         .eq('redemption_confirmed', false)
@@ -196,9 +200,9 @@ function ShopContent() {
 
   // Confirm receipt mutation
   const confirmReceiptMutation = useMutation({
-    mutationFn: async (orderId: string) => {
+    mutationFn: async ({ orderId, orderNumber }: { orderId: string; orderNumber: string }) => {
       const { data, error } = await supabase.functions.invoke('redeem-code', {
-        body: { code: 'DIRECT_CONFIRM', action: 'confirm_receipt', orderId },
+        body: { code: 'DIRECT_CONFIRM', action: 'confirm_receipt', orderId, orderNumber },
       });
 
       if (error) {
@@ -222,7 +226,7 @@ function ShopContent() {
       toast.success('Receipt confirmed! Seller has been credited.');
       refetchOrders();
     },
-    onError: (error: any) => {
+    onError: (error: Error) => {
       toast.error(error.message || 'Failed to confirm receipt');
     },
   });
@@ -544,7 +548,7 @@ function ShopContent() {
                           </div>
                           <div className="flex items-center gap-2">
                             <Button
-                              onClick={() => confirmReceiptMutation.mutate(order.id)}
+                              onClick={() => confirmReceiptMutation.mutate({ orderId: order.id, orderNumber: order.order_number })}
                               disabled={confirmReceiptMutation.isPending}
                               className="bg-green-600 hover:bg-green-700"
                             >
@@ -576,7 +580,7 @@ function ShopContent() {
                             <div className="flex gap-2">
                               <Button onClick={async () => {
                                 const { data: userData } = await supabase.auth.getUser();
-                                const buyerId = userData?.data?.user?.id;
+                                const buyerId = userData?.user?.id;
                                 // Allow anonymous ratings
                                 const { error } = await supabase.from('seller_ratings').insert({ 
                                   seller_id: shop.owner_id, 
@@ -652,6 +656,8 @@ function ShopContent() {
                 image={product.images?.[0]}
                 shopId={shopId!}
                 stockQuantity={product.stock_quantity}
+                verificationStatus={product.verification_status}
+                verificationDetails={product.verification_details as VerificationDetails | null}
               />
             ))}
           </div>

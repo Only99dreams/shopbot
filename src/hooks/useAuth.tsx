@@ -3,14 +3,23 @@ import { User, Session, AuthResponse } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
 import { useNavigate } from 'react-router-dom';
 
+export interface SignUpMetadata {
+  full_name?: string;
+  phone?: string;
+  shop_name?: string;
+  referral_code?: string;
+  account_type?: 'seller' | 'delivery_agent';
+}
+
 interface AuthContextType {
   user: User | null;
   session: Session | null;
   loading: boolean;
-  signUp: (email: string, password: string, metadata?: { full_name?: string; phone?: string; shop_name?: string }) => Promise<{ data: AuthResponse['data'] | null; error: Error | null }>;
+  signUp: (email: string, password: string, metadata?: SignUpMetadata) => Promise<{ data: AuthResponse['data'] | null; error: Error | null }>;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
   isAdmin: boolean;
+  isDeliveryAgent: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -20,6 +29,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [isDeliveryAgent, setIsDeliveryAgent] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -32,10 +42,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // Defer role check with setTimeout to avoid deadlock
         if (session?.user) {
           setTimeout(() => {
-            checkAdminRole(session.user.id);
+            checkRoles(session.user.id);
           }, 0);
         } else {
           setIsAdmin(false);
+          setIsDeliveryAgent(false);
         }
       }
     );
@@ -45,7 +56,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setSession(session);
       setUser(session?.user ?? null);
       if (session?.user) {
-        checkAdminRole(session.user.id);
+        checkRoles(session.user.id);
       }
       setLoading(false);
     });
@@ -53,25 +64,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => subscription.unsubscribe();
   }, []);
 
-  const checkAdminRole = async (userId: string) => {
+  const checkRoles = async (userId: string) => {
     try {
       const { data, error } = await supabase
         .from('user_roles')
         .select('role')
-        .eq('user_id', userId)
-        .eq('role', 'admin')
-        .maybeSingle();
-      
-      setIsAdmin(!!data && !error);
+        .eq('user_id', userId);
+
+      const roles = error ? [] : (data ?? []).map((row) => row.role);
+      setIsAdmin(roles.includes('admin'));
+      setIsDeliveryAgent(roles.includes('delivery_agent'));
     } catch {
       setIsAdmin(false);
+      setIsDeliveryAgent(false);
     }
   };
 
   const signUp = async (
-    email: string, 
-    password: string, 
-    metadata?: { full_name?: string; phone?: string; shop_name?: string }
+    email: string,
+    password: string,
+    metadata?: SignUpMetadata
   ) => {
     const { data, error } = await supabase.auth.signUp({
       email,
@@ -98,11 +110,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
     setSession(null);
     setIsAdmin(false);
+    setIsDeliveryAgent(false);
     navigate('/');
   };
 
   return (
-    <AuthContext.Provider value={{ user, session, loading, signUp, signIn, signOut, isAdmin }}>
+    <AuthContext.Provider value={{ user, session, loading, signUp, signIn, signOut, isAdmin, isDeliveryAgent }}>
       {children}
     </AuthContext.Provider>
   );

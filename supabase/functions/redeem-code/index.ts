@@ -23,6 +23,7 @@ serve(async (req) => {
   let code: string | undefined;
   let action: string | undefined;
   let orderId: string | undefined;
+  let orderNumber: string | undefined;
 
   try {
     let body: any;
@@ -36,6 +37,7 @@ serve(async (req) => {
     code = body?.code;
     action = body?.action;
     orderId = body?.orderId;
+    orderNumber = body?.orderNumber;
 
     console.log('Redeem code request:', { code, action, orderId });
 
@@ -51,10 +53,13 @@ serve(async (req) => {
     if (action === 'confirm_receipt' && orderId) {
       console.log('Confirm receipt action with orderId:', orderId);
 
-      // Check if order exists first to provide better error message
+      // Load the order plus the linked buyer account (if any).
       const { data: existingOrder, error: checkError } = await supabase
         .from('orders')
-        .select('id, redemption_confirmed, payment_status')
+        .select(`
+          *,
+          customers ( user_id )
+        `)
         .eq('id', orderId)
         .maybeSingle();
 
@@ -75,68 +80,34 @@ serve(async (req) => {
         return jsonResponse({ success: false, error: 'Order is not paid yet' });
       }
 
-      let order: any | null = existingOrder;
+      const order = existingOrder;
 
-      // Check if this is an anonymous confirmation (from marketplace tracking)
-      const isAnonymous = code === 'DIRECT_CONFIRM';
-      console.log('Is anonymous confirmation:', isAnonymous);
+      // Authorization: a logged-in buyer may confirm only their own order.
+      // Guests may confirm a guest order by proving they know its order number.
+      const customerRel = Array.isArray(order.customers) ? order.customers[0] : order.customers;
+      const ownerUserId: string | null = customerRel?.user_id ?? null;
 
-      if (!isAnonymous) {
-        // Authenticated confirmation
-        const authHeader = req.headers.get('Authorization');
-        if (!authHeader) {
-          return jsonResponse({ success: false, error: 'Authentication required' });
-        }
-
+      let user: { id: string } | null = null;
+      const authHeader = req.headers.get('Authorization');
+      if (authHeader) {
         const token = authHeader.replace('Bearer ', '');
-        const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+        const { data: authData } = await supabase.auth.getUser(token);
+        user = authData?.user ?? null;
+      }
 
-        if (authError || !user) {
-          return jsonResponse({ success: false, error: 'Authentication failed' });
+      const isOwner = !!user && !!ownerUserId && ownerUserId === user.id;
+
+      if (!isOwner) {
+        const suppliedOrderNumber = (orderNumber || '').trim().toUpperCase();
+        const actualOrderNumber = String(order.order_number || '').trim().toUpperCase();
+        const knowsOrderNumber = suppliedOrderNumber.length > 0 && suppliedOrderNumber === actualOrderNumber;
+
+        if (!knowsOrderNumber) {
+          return jsonResponse({
+            success: false,
+            error: 'You are not allowed to confirm this order',
+          });
         }
-
-        // We already checked the order exists and is paid and not confirmed above
-        // Now just verify ownership if they are logged in and it's not a guest order
-        const { data: orderData } = await supabase
-          .from('orders')
-          .select('*')
-          .eq('id', orderId)
-          .maybeSingle();
-        
-        order = orderData;
-      } else {
-        // Anonymous confirmation - already validated basic state above
-        const { data: orderData } = await supabase
-          .from('orders')
-          .select('*')
-          .eq('id', orderId)
-          .maybeSingle();
-        
-        order = orderData;
-      } else {
-        // Anonymous confirmation (from marketplace tracking)
-        console.log('Anonymous confirmation for orderId:', orderId);
-
-        const { data: orderData, error: orderError } = await supabase
-          .from('orders')
-          .select('*')
-          .eq('id', orderId)
-          .eq('payment_status', 'paid')
-          .eq('redemption_confirmed', false)
-          .maybeSingle();
-
-        console.log('Order query result:', { order: orderData, orderError });
-
-        if (orderError) {
-          console.error('Order query error:', orderError);
-          return jsonResponse({ success: false, error: 'Failed to look up order' });
-        }
-
-        if (!orderData) {
-          return jsonResponse({ success: false, error: 'Order not found or already confirmed' });
-        }
-
-        order = orderData;
       }
 
       // Update order (works for both authenticated and anonymous)
@@ -363,52 +334,53 @@ serve(async (req) => {
       }
 
       if (payment && !payment.credited_to_seller) {
-        const { data: wallet, error: walletError } = await supabase
-          .from('seller_wallets')
-          .select('*')
-          .eq('shop_id', redemptionCode.shop_id)
-          .maybeSingle();
+        const sellerAmount = Number(payment.seller_amount) || 0;
 
-        if (walletError) {
-          console.error('Error fetching wallet for code confirm_receipt:', walletError);
-        }
-
-        if (wallet) {
-          await supabase
-            .from('seller_wallets')
+        if (sellerAmount > 0) {
+          // Claim the credit atomically so a concurrent verify/webhook call
+          // can never credit the same payment twice.
+          const { data: claimed } = await supabase
+            .from('payments')
             .update({
-              balance: wallet.balance + payment.seller_amount,
-              total_earned: wallet.total_earned + payment.seller_amount,
+              credited_to_seller: true,
+              credited_at: new Date().toISOString(),
             })
-            .eq('id', wallet.id);
-        } else {
-          // Create wallet if it doesn't exist
-          await supabase
-            .from('seller_wallets')
-            .insert({
-              shop_id: redemptionCode.shop_id,
-              balance: payment.seller_amount,
-              total_earned: payment.seller_amount,
-            });
+            .eq('id', payment.id)
+            .eq('credited_to_seller', false)
+            .select('id')
+            .maybeSingle();
+
+          if (claimed) {
+            const { data: wallet, error: walletError } = await supabase
+              .from('seller_wallets')
+              .select('*')
+              .eq('shop_id', redemptionCode.shop_id)
+              .maybeSingle();
+
+            if (walletError) {
+              console.error('Error fetching wallet for code confirm_receipt:', walletError);
+            }
+
+            if (wallet) {
+              await supabase
+                .from('seller_wallets')
+                .update({
+                  balance: Number(wallet.balance) + sellerAmount,
+                  total_earned: Number(wallet.total_earned) + sellerAmount,
+                })
+                .eq('id', wallet.id);
+            } else {
+              // Create wallet if it doesn't exist
+              await supabase
+                .from('seller_wallets')
+                .insert({
+                  shop_id: redemptionCode.shop_id,
+                  balance: sellerAmount,
+                  total_earned: sellerAmount,
+                });
+            }
+          }
         }
-
-        await supabase
-          .from('payments')
-          .update({
-            credited_to_seller: true,
-            credited_at: new Date().toISOString(),
-          })
-          .eq('id', payment.id);
-      }
-
-      return jsonResponse({ success: true, message: 'Receipt confirmed successfully' });
-    }
-          .from('payments')
-          .update({
-            credited_to_seller: true,
-            credited_at: new Date().toISOString(),
-          })
-          .eq('id', payment.id);
       }
 
       return jsonResponse({ success: true, message: 'Receipt confirmed successfully' });

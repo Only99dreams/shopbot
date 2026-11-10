@@ -15,7 +15,7 @@ const navLinks: { label: string; href: string; isRoute?: boolean }[] = [
 
 export function Navbar() {
   const [isOpen, setIsOpen] = useState(false);
-  const { user, isAdmin } = useAuth();
+  const { user, isAdmin, isDeliveryAgent } = useAuth();
   const { count } = useMessageNotifications();
 
   return (
@@ -63,19 +63,30 @@ export function Navbar() {
                     </Button>
                   </Link>
                 )}
-                <Link to="/dashboard" className="relative">
-                  <Button size="sm" className="bg-primary hover:bg-primary/90 text-primary-foreground">
-                    Dashboard
-                  </Button>
-                  {count > 0 && (
-                    <span className="absolute -top-1 -right-2 inline-flex items-center justify-center h-4 min-w-4 px-1 rounded-full text-xs bg-red-500 text-white">
-                      {count}
-                    </span>
-                  )}
-                </Link>
+                {isDeliveryAgent ? (
+                  <Link to="/delivery/dashboard">
+                    <Button size="sm" className="bg-primary hover:bg-primary/90 text-primary-foreground">
+                      Delivery dashboard
+                    </Button>
+                  </Link>
+                ) : (
+                  <Link to="/dashboard" className="relative">
+                    <Button size="sm" className="bg-primary hover:bg-primary/90 text-primary-foreground">
+                      Dashboard
+                    </Button>
+                    {count > 0 && (
+                      <span className="absolute -top-1 -right-2 inline-flex items-center justify-center h-4 min-w-4 px-1 rounded-full text-xs bg-red-500 text-white">
+                        {count}
+                      </span>
+                    )}
+                  </Link>
+                )}
               </>
             ) : (
               <>
+                <Link to="/delivery">
+                  <Button variant="ghost" size="sm">Become a Delivery Agent</Button>
+                </Link>
                 <Link to="/auth">
                   <Button variant="ghost" size="sm">Login</Button>
                 </Link>
@@ -138,14 +149,30 @@ export function Navbar() {
                         </Button>
                       </Link>
                     )}
-                    <Link to="/dashboard" onClick={() => setIsOpen(false)}>
-                      <Button className="w-full bg-primary hover:bg-primary/90 text-primary-foreground">
-                        Dashboard
-                      </Button>
-                    </Link>
+                    {isDeliveryAgent ? (
+                      <Link to="/delivery/dashboard" onClick={() => setIsOpen(false)}>
+                        <Button className="w-full bg-primary hover:bg-primary/90 text-primary-foreground">
+                          Delivery dashboard
+                        </Button>
+                      </Link>
+                    ) : (
+                      <>
+                        <Link to="/dashboard" onClick={() => setIsOpen(false)}>
+                          <Button className="w-full bg-primary hover:bg-primary/90 text-primary-foreground">
+                            Dashboard
+                          </Button>
+                        </Link>
+                        <Link to="/delivery" onClick={() => setIsOpen(false)}>
+                          <Button variant="ghost" className="w-full">Become a Delivery Agent</Button>
+                        </Link>
+                      </>
+                    )}
                   </>
                 ) : (
                   <>
+                    <Link to="/delivery" onClick={() => setIsOpen(false)}>
+                      <Button variant="ghost" className="w-full">Become a Delivery Agent</Button>
+                    </Link>
                     <Link to="/auth" onClick={() => setIsOpen(false)}>
                       <Button variant="ghost" className="w-full">Login</Button>
                     </Link>

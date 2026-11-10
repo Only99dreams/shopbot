@@ -36,27 +36,19 @@ serve(async (req) => {
 
     console.log(`Received message from ${customerPhone}: ${body}`);
 
-    // Find the shop by WhatsApp number
-    let { data: shop } = await supabase
+    // Find the shop by WhatsApp number. Never route to an arbitrary shop:
+    // an unknown number must be ignored.
+    const normalizedShopPhone = shopPhone.replace('+', '');
+    const { data: shop } = await supabase
       .from('shops')
       .select('id, name, owner_id')
-      .eq('whatsapp_number', shopPhone.replace('+', ''))
+      .eq('whatsapp_number', normalizedShopPhone)
       .eq('is_active', true)
-      .single();
+      .maybeSingle();
 
     if (!shop) {
-      // Try to find any active shop for demo purposes
-      const { data: anyShop } = await supabase
-        .from('shops')
-        .select('id, name, owner_id')
-        .eq('is_active', true)
-        .limit(1)
-        .single();
-      
-      if (!anyShop) {
-        return new Response('Shop not found or inactive subscription', { status: 200 });
-      }
-      shop = anyShop;
+      console.log(`No active shop found for WhatsApp number ${normalizedShopPhone}`);
+      return new Response('Shop not found or inactive subscription', { status: 200 });
     }
 
     // Verify the shop has an active subscription
@@ -64,7 +56,7 @@ serve(async (req) => {
       .from('subscriptions')
       .select('status')
       .eq('shop_id', shop.id)
-      .single();
+      .maybeSingle();
 
     if (!subscription || subscription.status !== 'active') {
       console.log(`Shop ${shop.id} has inactive subscription, ignoring message`);
@@ -79,7 +71,7 @@ serve(async (req) => {
       .select('*')
       .eq('shop_id', shopId)
       .eq('customer_phone', customerPhone)
-      .single();
+      .maybeSingle();
 
     if (!conversation) {
       // Create new conversation
@@ -94,13 +86,25 @@ serve(async (req) => {
           unread_count: 1,
         })
         .select()
-        .single();
+        .maybeSingle();
 
-      if (createError) {
-        console.error('Error creating conversation:', createError);
-        throw createError;
+      if (createError || !newConv) {
+        // Another delivery may have created it first (unique shop+phone index).
+        console.error('Error creating conversation, retrying lookup:', createError);
+        const { data: existing } = await supabase
+          .from('whatsapp_conversations')
+          .select('*')
+          .eq('shop_id', shopId)
+          .eq('customer_phone', customerPhone)
+          .maybeSingle();
+
+        if (!existing) {
+          throw createError || new Error('Failed to create conversation');
+        }
+        conversation = existing;
+      } else {
+        conversation = newConv;
       }
-      conversation = newConv;
     } else {
       // Update existing conversation
       await supabase
@@ -111,6 +115,10 @@ serve(async (req) => {
           unread_count: (conversation.unread_count || 0) + 1,
         })
         .eq('id', conversation.id);
+    }
+
+    if (!conversation) {
+      throw new Error('Failed to resolve conversation');
     }
 
     // Store the incoming message

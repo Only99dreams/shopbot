@@ -66,17 +66,25 @@ serve(async (req) => {
       .update({ verified: true })
       .eq("id", otpRecord.id);
 
-    // Find the user by email and confirm their email using admin API
-    const { data: usersData, error: listError } = await supabase.auth.admin.listUsers();
-    
-    if (listError) {
-      console.error("Error listing users:", listError);
-      return jsonResponse({ success: false, error: "Failed to verify user" }, 500);
-    }
+    // Find the user by email and confirm their email using admin API.
+    // listUsers is paginated, so walk every page.
+    let user: { id: string } | null = null;
+    for (let page = 1; ; page += 1) {
+      const { data: usersData, error: listError } = await supabase.auth.admin.listUsers({
+        page,
+        perPage: 1000,
+      });
 
-    const user = usersData?.users?.find(
-      (u: any) => u.email?.toLowerCase() === email.toLowerCase()
-    );
+      if (listError) {
+        console.error("Error listing users:", listError);
+        return jsonResponse({ success: false, error: "Failed to verify user" }, 500);
+      }
+
+      const users = usersData?.users ?? [];
+      user = users.find((u) => u.email?.toLowerCase() === email.toLowerCase()) ?? null;
+
+      if (user || users.length < 1000) break;
+    }
 
     if (!user) {
       return jsonResponse({ success: false, error: "User not found" }, 400);

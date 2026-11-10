@@ -16,9 +16,30 @@ import { toast } from 'sonner';
 import { PaymentProof, usePaymentProofs } from '@/hooks/usePaymentProofs';
 import { PaymentProofReviewDialog } from '@/components/admin/PaymentProofReviewDialog';
 
+interface PayoutRequest {
+  id: string;
+  shop_id: string;
+  amount: number;
+  status: string;
+  payout_type: string;
+  bank_name: string | null;
+  account_number: string | null;
+  account_name: string | null;
+  admin_notes: string | null;
+  created_at: string;
+  shops?: {
+    id: string;
+    owner_id: string;
+    name: string;
+    bank_name: string | null;
+    account_number: string | null;
+    account_name: string | null;
+  } | null;
+}
+
 export default function AdminPayments() {
   const queryClient = useQueryClient();
-  const [selectedPayout, setSelectedPayout] = useState<any>(null);
+  const [selectedPayout, setSelectedPayout] = useState<PayoutRequest | null>(null);
   const [selectedProof, setSelectedProof] = useState<PaymentProof | null>(null);
   const [adminNotes, setAdminNotes] = useState('');
 
@@ -80,44 +101,9 @@ export default function AdminPayments() {
 
       if (error) throw error;
 
-      if (status === 'approved' && selectedPayout) {
-        if (selectedPayout.payout_type === 'referral') {
-          const ownerId = selectedPayout.shops?.owner_id;
-          if (ownerId) {
-            const { data: code } = await supabase
-              .from('referral_codes')
-              .select('id, available_balance, total_withdrawn')
-              .eq('user_id', ownerId)
-              .maybeSingle();
-
-            if (code) {
-              await supabase
-                .from('referral_codes')
-                .update({
-                  available_balance: Number(code.available_balance || 0) - selectedPayout.amount,
-                  total_withdrawn: Number(code.total_withdrawn || 0) + selectedPayout.amount,
-                })
-                .eq('id', code.id);
-            }
-          }
-        } else {
-          const { data: wallet } = await supabase
-            .from('seller_wallets')
-            .select('*')
-            .eq('shop_id', selectedPayout.shop_id)
-            .single();
-
-          if (wallet) {
-            await supabase
-              .from('seller_wallets')
-              .update({
-                balance: wallet.balance - selectedPayout.amount,
-                total_withdrawn: wallet.total_withdrawn + selectedPayout.amount,
-              })
-              .eq('id', wallet.id);
-          }
-        }
-      }
+      // The on_payout_request_approved trigger (process_payout_request)
+      // deducts the wallet / referral balance exactly once when the status
+      // becomes 'approved'. Do not adjust balances here as well.
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-payout-requests'] });
@@ -314,7 +300,7 @@ export default function AdminPayments() {
                 <div className="lg:hidden space-y-3">
                   {payoutRequests?.length === 0 ? (
                     <div className="text-center py-8 text-muted-foreground">No payout requests</div>
-                  ) : payoutRequests?.map((payout: any) => (
+                  ) : payoutRequests?.map((payout) => (
                     <Card key={payout.id}>
                       <CardContent className="p-3 space-y-2">
                         <div className="flex items-center justify-between">
@@ -362,7 +348,7 @@ export default function AdminPayments() {
                       <TableRow>
                         <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">No payout requests</TableCell>
                       </TableRow>
-                    ) : payoutRequests?.map((payout: any) => (
+                    ) : payoutRequests?.map((payout) => (
                       <TableRow key={payout.id}>
                         <TableCell className="font-medium">{payout.shops?.name || 'Unknown'}</TableCell>
                         <TableCell>{payout.payout_type === 'referral' ? 'Referral' : 'Sales'}</TableCell>
@@ -398,7 +384,7 @@ export default function AdminPayments() {
                 <div className="lg:hidden space-y-3">
                   {wallets?.length === 0 ? (
                     <div className="text-center py-8 text-muted-foreground">No seller wallets</div>
-                  ) : wallets?.map((wallet: any) => (
+                  ) : wallets?.map((wallet) => (
                     <Card key={wallet.id}>
                       <CardContent className="p-3 space-y-2">
                         <p className="font-semibold">{wallet.shops?.name || 'Unknown'}</p>
@@ -435,7 +421,7 @@ export default function AdminPayments() {
                       <TableRow>
                         <TableCell colSpan={4} className="text-center py-8 text-muted-foreground">No seller wallets</TableCell>
                       </TableRow>
-                    ) : wallets?.map((wallet: any) => (
+                    ) : wallets?.map((wallet) => (
                       <TableRow key={wallet.id}>
                         <TableCell className="font-medium">{wallet.shops?.name || 'Unknown'}</TableCell>
                         <TableCell className="font-bold text-green-600">₦{Number(wallet.balance).toLocaleString()}</TableCell>
@@ -460,7 +446,7 @@ export default function AdminPayments() {
                 <div className="lg:hidden space-y-3">
                   {payments?.length === 0 ? (
                     <div className="text-center py-8 text-muted-foreground">No payments yet</div>
-                  ) : payments?.map((payment: any) => (
+                  ) : payments?.map((payment) => (
                     <Card key={payment.id}>
                       <CardContent className="p-3 space-y-2">
                         <div className="flex items-center justify-between">
@@ -504,7 +490,7 @@ export default function AdminPayments() {
                       <TableRow>
                         <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">No payments yet</TableCell>
                       </TableRow>
-                    ) : payments?.map((payment: any) => (
+                    ) : payments?.map((payment) => (
                       <TableRow key={payment.id}>
                         <TableCell className="font-medium">{payment.orders?.order_number || 'N/A'}</TableCell>
                         <TableCell>{payment.shops?.name || 'Unknown'}</TableCell>

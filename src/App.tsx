@@ -33,6 +33,8 @@ import Checkout from "./pages/Checkout";
 import Marketplace from "./pages/Marketplace";
 import Redeem from "./pages/Redeem";
 import ShopChat from "./pages/ShopChat";
+import DeliveryApply from "./pages/DeliveryApply";
+import DeliveryDashboard from "./pages/DeliveryDashboard";
 // Admin pages
 import Sellers from "./pages/admin/Sellers";
 import Shops from "./pages/admin/Shops";
@@ -45,6 +47,7 @@ import AdminAnalytics from "./pages/admin/AdminAnalytics";
 import AdminPayments from "./pages/admin/AdminPayments";
 import AdminOrders from "./pages/admin/AdminOrders";
 import AdminSellersManagement from "./pages/admin/AdminSellersManagement";
+import AdminDeliveryAgents from "./pages/admin/AdminDeliveryAgents";
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import ErrorBoundary from './components/ErrorBoundary';
@@ -111,6 +114,9 @@ const App = () => {
                 <Route path="/shop/:shopId/product/:productId" element={<ProductDetail />} />
                 <Route path="/shop/:shopId/checkout" element={<Checkout />} />
                 <Route path="/shop/:shopId/chat" element={<ShopChat />} />
+                {/* Delivery agent routes */}
+                <Route path="/delivery" element={<DeliveryApply />} />
+                <Route path="/delivery/dashboard" element={<ProtectedRoute><DeliveryDashboard /></ProtectedRoute>} />
                 {/* Seller dashboard routes */}
                 <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
                 <Route path="/dashboard/products" element={<ProtectedRoute><Products /></ProtectedRoute>} />
@@ -126,7 +132,7 @@ const App = () => {
                 <Route path="/admin" element={<ProtectedRoute requireAdmin><AdminDashboard /></ProtectedRoute>} />
                 <Route path="/admin/sellers" element={<ProtectedRoute requireAdmin><Sellers /></ProtectedRoute>} />
                 <Route path="/admin/sellers-management" element={<ProtectedRoute requireAdmin><AdminSellersManagement /></ProtectedRoute>} />
-                <Route path="/admin/shops" element={<ProtectedRoute requireAdmin><Shops /></ProtectedRoute>} />
+                <Route path="/admin/delivery-agents" element={<ProtectedRoute requireAdmin><AdminDeliveryAgents /></ProtectedRoute>} />                <Route path="/admin/shops" element={<ProtectedRoute requireAdmin><Shops /></ProtectedRoute>} />
                 <Route path="/admin/products" element={<ProtectedRoute requireAdmin><AdminProducts /></ProtectedRoute>} />
                 <Route path="/admin/orders" element={<ProtectedRoute requireAdmin><AdminOrders /></ProtectedRoute>} />
                 <Route path="/admin/payments" element={<ProtectedRoute requireAdmin><AdminPayments /></ProtectedRoute>} />

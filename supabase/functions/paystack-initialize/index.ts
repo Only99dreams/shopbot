@@ -12,14 +12,18 @@ serve(async (req) => {
   }
 
   try {
-    const { orderId, email, amount, callbackUrl } = await req.json();
-    
+    const { orderId, email, callbackUrl } = await req.json();
+
     const paystackSecretKey = Deno.env.get('PAYSTACK_SECRET_KEY');
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    
+
     if (!paystackSecretKey) {
       throw new Error('Paystack secret key not configured');
+    }
+
+    if (!orderId) {
+      throw new Error('Order id is required');
     }
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
@@ -29,19 +33,29 @@ serve(async (req) => {
       .from('orders')
       .select('*, shops(*)')
       .eq('id', orderId)
-      .single();
+      .maybeSingle();
 
     if (orderError || !order) {
       throw new Error('Order not found');
     }
 
+    if (order.payment_status === 'paid') {
+      throw new Error('This order has already been paid');
+    }
+
+    // Never trust a client-supplied amount: always charge the stored order total.
+    const orderTotal = Number(order.total);
+    if (!Number.isFinite(orderTotal) || orderTotal <= 0) {
+      throw new Error('Order total is invalid');
+    }
+
     // Generate unique reference
     const reference = `SHOPNAIJA_${orderId}_${Date.now()}`;
-    
-    // Amount in kobo (Paystack uses smallest currency unit)
-    const amountInKobo = Math.round((amount || order.total) * 100);
 
-    console.log('Initializing Paystack payment:', { reference, amount: amountInKobo, email });
+    // Amount in kobo (Paystack uses smallest currency unit)
+    const amountInKobo = Math.round(orderTotal * 100);
+
+    console.log('Initializing Paystack payment:', { reference, amount: amountInKobo });
 
     // Initialize Paystack transaction
     const response = await fetch('https://api.paystack.co/transaction/initialize', {
@@ -51,7 +65,7 @@ serve(async (req) => {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        email,
+        email: email || 'customer@shopafrica.com',
         amount: amountInKobo,
         reference,
         callback_url: callbackUrl,
@@ -59,6 +73,7 @@ serve(async (req) => {
           order_id: orderId,
           shop_id: order.shop_id,
           order_number: order.order_number,
+          payment_type: 'order',
         },
       }),
     });
@@ -70,17 +85,24 @@ serve(async (req) => {
       throw new Error(data.message || 'Failed to initialize payment');
     }
 
+    // The seller is paid on the goods subtotal only. The delivery fee is
+    // reserved for the delivery agent and the platform.
+    const orderSubtotal = Number(order.subtotal);
+    const sellerBase = Number.isFinite(orderSubtotal) && orderSubtotal > 0
+      ? orderSubtotal
+      : orderTotal;
+
     // Create payment record
     const { error: paymentError } = await supabase
       .from('payments')
       .insert({
         order_id: orderId,
         shop_id: order.shop_id,
-        amount: order.total,
+        amount: orderTotal,
         paystack_reference: reference,
         status: 'pending',
-        platform_fee: order.total * 0.05, // 5% platform fee
-        seller_amount: order.total * 0.95, // 95% to seller
+        platform_fee: sellerBase * 0.05, // 5% platform fee
+        seller_amount: sellerBase * 0.95, // 95% to seller
       });
 
     if (paymentError) {
@@ -95,11 +117,11 @@ serve(async (req) => {
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
-  } catch (error: any) {
+  } catch (error) {
     console.error('Error in paystack-initialize:', error);
-    return new Response(JSON.stringify({ 
+    return new Response(JSON.stringify({
       success: false,
-      error: error.message 
+      error: error instanceof Error ? error.message : 'Failed to initialize payment',
     }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },

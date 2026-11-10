@@ -1,4 +1,4 @@
-project_id = "bcluoxofnwlmimowiqas"
+project_id = "yanstinwjnhzdqaiykiw"
 
 [functions.send-whatsapp-otp]
 verify_jwt = false
@@ -26,3 +26,12 @@ verify_jwt = false
 
 [functions.flutterwave-subscribe]
 verify_jwt = false
+
+[functions.paystack-webhook]
+verify_jwt = false
+
+[functions.verify-nafdac]
+verify_jwt = true
+
+[functions.analyze-shop-video]
+verify_jwt = true

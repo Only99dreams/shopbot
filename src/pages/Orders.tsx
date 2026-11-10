@@ -38,7 +38,7 @@ interface Order {
   redemption_codes: {
     code: string;
     status: string;
-  } | null;
+  }[] | null;
 }
 
 const statusColors: Record<string, string> = {
@@ -214,11 +214,11 @@ export default function Orders() {
                       {order.payment_status}
                     </span>
                   </div>
-                  {order.redemption_codes && (
+                  {order.redemption_codes?.[0] && (
                     <div className="flex items-center justify-between text-sm">
                       <span className="text-muted-foreground">Code</span>
                       <span className="font-mono text-xs bg-muted px-2 py-1 rounded">
-                        {order.redemption_codes.code}
+                        {order.redemption_codes[0].code}
                       </span>
                     </div>
                   )}
@@ -291,9 +291,9 @@ export default function Orders() {
                           </span>
                         </td>
                         <td className="p-4">
-                          {order.redemption_codes ? (
+                          {order.redemption_codes?.[0] ? (
                             <span className="font-mono text-xs bg-muted px-2 py-1 rounded">
-                              {order.redemption_codes.code}
+                              {order.redemption_codes[0].code}
                             </span>
                           ) : (
                             <span className="text-xs text-muted-foreground">-</span>

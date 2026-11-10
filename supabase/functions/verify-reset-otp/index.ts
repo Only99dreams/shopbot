@@ -69,17 +69,24 @@ serve(async (req) => {
       return jsonResponse({ success: false, error: "OTP has expired. Please request a new one." }, 400);
     }
 
-    // OTP is valid — find the user by email
-    const { data: usersData, error: listError } = await supabase.auth.admin.listUsers();
+    // OTP is valid — find the user by email. listUsers is paginated.
+    let targetUser: { id: string } | null = null;
+    for (let page = 1; ; page += 1) {
+      const { data: usersData, error: listError } = await supabase.auth.admin.listUsers({
+        page,
+        perPage: 1000,
+      });
 
-    if (listError) {
-      console.error("Error listing users:", listError);
-      return jsonResponse({ success: false, error: "Failed to find user" }, 500);
+      if (listError) {
+        console.error("Error listing users:", listError);
+        return jsonResponse({ success: false, error: "Failed to find user" }, 500);
+      }
+
+      const users = usersData?.users ?? [];
+      targetUser = users.find((u) => u.email?.toLowerCase() === normalizedEmail) ?? null;
+
+      if (targetUser || users.length < 1000) break;
     }
-
-    const targetUser = usersData?.users?.find(
-      (u: any) => u.email?.toLowerCase() === normalizedEmail
-    );
 
     if (!targetUser) {
       return jsonResponse({ success: false, error: "User not found" }, 404);

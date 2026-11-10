@@ -128,94 +128,33 @@ export default function Subscription() {
         const shopId = shop.id;
         console.log('Flutterwave callback detected - Verifying payment for shop:', shopId);
 
-        // Step 1: Call flutterwave-verify edge function (uses service role key, bypasses RLS)
-        // This will verify the payment with Flutterwave AND activate the subscription server-side
-        if (transactionId) {
-          console.log('Calling flutterwave-verify with transactionId:', transactionId, 'txRef:', txRef);
-          const { data: verifyData, error: verifyError } = await supabase.functions.invoke('flutterwave-verify', {
-            body: { transactionId, txRef: txRef || '' },
-          });
-
-          if (verifyError) {
-            console.error('Flutterwave verify error:', verifyError);
-            // Try to extract real error message
-            let message = 'Payment verification failed';
-            try {
-              if (verifyError.context && typeof verifyError.context.json === 'function') {
-                const body = await verifyError.context.json();
-                message = body?.error || verifyError.message || message;
-              }
-            } catch { /* ignore */ }
-            throw new Error(message);
-          }
-
-          console.log('Flutterwave verify response:', verifyData);
-
-          if (verifyData?.success) {
-            console.log('Payment verified successfully! Subscription activated server-side.');
-          } else {
-            console.warn('Payment verification returned success=false, attempting direct activation...');
-            // Fall through to direct activation below
-          }
+        if (!transactionId && !txRef) {
+          throw new Error('Missing payment reference');
         }
 
-        // Step 2: As a safety net, also try direct activation in case flutterwave-verify
-        // didn't handle the subscription (e.g., if tx_ref was missing from meta)
-        const { data: currentSub } = await supabase
-          .from('subscriptions')
-          .select('id, status')
-          .eq('shop_id', shopId)
-          .maybeSingle();
+        // Verification and activation happen entirely server-side. The client
+        // must never activate a subscription on its own.
+        console.log('Calling flutterwave-verify with transactionId:', transactionId, 'txRef:', txRef);
+        const { data: verifyData, error: verifyError } = await supabase.functions.invoke('flutterwave-verify', {
+          body: { transactionId, txRef: txRef || '' },
+        });
 
-        if (currentSub && currentSub.status !== 'active') {
-          console.log('Subscription still not active after verify, attempting direct activation...');
-          const now = new Date();
-          const periodEnd = new Date(now);
-          periodEnd.setMonth(periodEnd.getMonth() + 1);
-
-          const { error: updateError } = await supabase
-            .from('subscriptions')
-            .update({
-              status: 'active',
-              plan: selectedPlan?.id || currentPlan || 'starter',
-              current_period_start: now.toISOString(),
-              current_period_end: periodEnd.toISOString(),
-            })
-            .eq('id', currentSub.id);
-
-          if (updateError) {
-            console.error('Direct subscription update failed:', updateError);
-          } else {
-            console.log('Direct subscription activation succeeded');
-          }
-
-          // Also activate the shop directly
-          await supabase
-            .from('shops')
-            .update({ is_active: true })
-            .eq('id', shopId);
+        if (verifyError) {
+          console.error('Flutterwave verify error:', verifyError);
+          let message = 'Payment verification failed';
+          try {
+            if (verifyError.context && typeof verifyError.context.json === 'function') {
+              const body = await verifyError.context.json();
+              message = body?.error || verifyError.message || message;
+            }
+          } catch { /* ignore */ }
+          throw new Error(message);
         }
 
-        // Step 3: Record billing history
-        const planAmount = selectedPlan?.price
-          ?? (subscriptionPlans && (subscriptionPlans as any)[currentPlan]?.price)
-          ?? 0;
+        console.log('Flutterwave verify response:', verifyData);
 
-        if (currentSub?.id && planAmount > 0) {
-          const { error: proofError } = await supabase
-            .from('payment_proofs')
-            .insert({
-              payment_type: 'subscription',
-              reference_id: currentSub.id,
-              shop_id: shopId,
-              amount: planAmount,
-              status: 'approved',
-              admin_notes: transactionId ? `Flutterwave transaction_id: ${transactionId}` : null,
-            });
-
-          if (proofError) {
-            console.error('Error recording payment proof:', proofError);
-          }
+        if (!verifyData?.success) {
+          throw new Error(verifyData?.error || 'Payment could not be verified');
         }
 
         console.log('Subscription activated successfully! Refreshing shop state...');

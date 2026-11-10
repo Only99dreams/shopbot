@@ -3,11 +3,13 @@ import { DashboardLayout } from "@/components/DashboardLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Search, Edit, Trash2, Package, Loader2, Eye, EyeOff } from "lucide-react";
+import { Plus, Search, Edit, Trash2, Package, Loader2, Eye, EyeOff, Clapperboard } from "lucide-react";
 import { useProducts, type Product } from "@/hooks/useProducts";
 import { AddProductDialog } from "@/components/products/AddProductDialog";
 import { EditProductDialog } from "@/components/products/EditProductDialog";
 import { DeleteProductDialog } from "@/components/products/DeleteProductDialog";
+import { VideoProductImportDialog } from "@/components/products/VideoProductImportDialog";
+import { ProductVerificationBadge, type VerificationDetails } from "@/components/products/ProductVerificationBadge";
 import { Badge } from "@/components/ui/badge";
 
 export default function Products() {
@@ -15,6 +17,7 @@ export default function Products() {
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [addOpen, setAddOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
   const [editProduct, setEditProduct] = useState<Product | null>(null);
   const [deleteProduct, setDeleteProduct] = useState<Product | null>(null);
 
@@ -45,10 +48,16 @@ export default function Products() {
             <h1 className="text-2xl lg:text-3xl font-bold">Products</h1>
             <p className="text-muted-foreground">Manage your product catalog</p>
           </div>
-          <Button onClick={() => setAddOpen(true)} className="gradient-primary">
-            <Plus className="h-5 w-5 mr-2" />
-            Add Product
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button variant="outline" onClick={() => setImportOpen(true)}>
+              <Clapperboard className="h-5 w-5 mr-2" />
+              Import from video
+            </Button>
+            <Button onClick={() => setAddOpen(true)} className="gradient-primary">
+              <Plus className="h-5 w-5 mr-2" />
+              Add Product
+            </Button>
+          </div>
         </div>
 
         {/* Search and Filter */}
@@ -146,6 +155,13 @@ export default function Products() {
                   <div className="mb-2">
                     <h3 className="font-semibold line-clamp-1">{product.name}</h3>
                     <p className="text-sm text-muted-foreground">{getCategoryName(product.category_id)}</p>
+                    <div className="mt-1.5">
+                      <ProductVerificationBadge
+                        status={product.verification_status}
+                        details={product.verification_details as VerificationDetails | null}
+                        compact
+                      />
+                    </div>
                   </div>
                   
                   <div className="flex items-center justify-between mb-4">
@@ -193,6 +209,11 @@ export default function Products() {
       <AddProductDialog 
         open={addOpen} 
         onOpenChange={setAddOpen} 
+        categories={categories}
+      />
+      <VideoProductImportDialog
+        open={importOpen}
+        onOpenChange={setImportOpen}
         categories={categories}
       />
       <EditProductDialog 

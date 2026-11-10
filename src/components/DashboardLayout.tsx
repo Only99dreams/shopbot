@@ -25,6 +25,7 @@ import { cn } from "@/lib/utils";
 import { useState, useEffect } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { useShop } from "@/hooks/useShop";
+import { NotificationBell } from "@/components/NotificationBell";
 
 const menuItems = [
   { icon: LayoutDashboard, label: "Dashboard", href: "/dashboard", requiresSub: false },
@@ -83,6 +84,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
           <span className="font-semibold truncate max-w-[150px]">{shop?.name || 'ShopAfrica'}</span>
         </Link>
         <div className="flex items-center gap-2">
+          <NotificationBell />
           <ThemeToggle />
           <button
             onClick={() => setMobileOpen(!mobileOpen)}
@@ -198,6 +200,9 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
               <div className="hidden lg:block">
                 <ThemeToggle />
               </div>
+            </div>
+            <div className={cn("flex items-center gap-1", collapsed && !mobileOpen ? "lg:justify-center" : "justify-end")}>
+              <NotificationBell />
             </div>
             <Button
               variant="ghost"

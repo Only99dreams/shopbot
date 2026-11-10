@@ -83,6 +83,11 @@ export function HeroSection() {
                   Explore Marketplace
                 </Button>
               </Link>
+              <Link to="/delivery">
+                <Button variant="ghost" size="lg" className="w-full sm:w-auto">
+                  Become a Delivery Agent
+                </Button>
+              </Link>
             </div>
 
             {/* Social Proof */}

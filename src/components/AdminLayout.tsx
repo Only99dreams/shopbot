@@ -15,6 +15,7 @@ import {
   Package,
   Wallet,
   UserCog,
+  Truck,
   Menu,
   X
 } from "lucide-react";
@@ -23,6 +24,7 @@ import { ThemeToggle } from "@/components/ThemeToggle";
 import { cn } from "@/lib/utils";
 import { useState, useEffect } from "react";
 import { useAuth } from "@/hooks/useAuth";
+import { NotificationBell } from "@/components/NotificationBell";
 
 const menuItems = [
   { icon: LayoutDashboard, label: "Overview", href: "/admin" },
@@ -31,6 +33,7 @@ const menuItems = [
   { icon: Store, label: "Shops", href: "/admin/shops" },
   { icon: Package, label: "Products", href: "/admin/products" },
   { icon: ShoppingCart, label: "Orders", href: "/admin/orders" },
+  { icon: Truck, label: "Delivery Agents", href: "/admin/delivery-agents" },
   { icon: Wallet, label: "Payments", href: "/admin/payments" },
   { icon: CreditCard, label: "Subscriptions", href: "/admin/subscriptions" },
   { icon: Share2, label: "Referrals", href: "/admin/referrals" },
@@ -73,6 +76,7 @@ export function AdminLayout({ children }: AdminLayoutProps) {
           <span className="text-lg font-bold">Admin Panel</span>
         </div>
         <div className="flex items-center gap-2">
+          <NotificationBell />
           <ThemeToggle />
           <button
             onClick={() => setMobileOpen(!mobileOpen)}
@@ -156,6 +160,9 @@ export function AdminLayout({ children }: AdminLayoutProps) {
               <div className="hidden lg:block">
                 <ThemeToggle />
               </div>
+            </div>
+            <div className={cn("flex items-center gap-1", collapsed && !mobileOpen ? "lg:justify-center" : "justify-end")}>
+              <NotificationBell />
             </div>
             <Button
               variant="ghost"

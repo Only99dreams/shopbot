@@ -32,9 +32,11 @@ import {
   ShoppingCart,
   CheckCircle,
   Clock,
-  Loader2
+  Loader2,
+  Truck
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { ProductVerificationBadge, type VerificationDetails } from '@/components/products/ProductVerificationBadge';
 import { useAuth } from '@/hooks/useAuth';
 import { useMutation } from '@tanstack/react-query';
 import { toast } from 'sonner';
@@ -80,6 +82,9 @@ interface Product {
   description: string | null;
   shop_id: string;
   is_available: boolean | null;
+  nafdac_number?: string | null;
+  verification_status?: string | null;
+  verification_details?: VerificationDetails | null;
   shops: {
     id: string;
     name: string;
@@ -243,7 +248,12 @@ export default function Marketplace() {
   const confirmReceiptMutation = useMutation({
     mutationFn: async (orderId: string) => {
       const { data, error } = await supabase.functions.invoke('redeem-code', {
-        body: { code: 'DIRECT_CONFIRM', action: 'confirm_receipt', orderId },
+        body: {
+          code: 'DIRECT_CONFIRM',
+          action: 'confirm_receipt',
+          orderId,
+          orderNumber: trackedOrder?.order_number,
+        },
       });
 
       if (error) {
@@ -466,6 +476,18 @@ export default function Marketplace() {
                   </span>
                 </div>
               )}
+            </div>
+
+            <div className="mt-8 flex justify-center">
+              <Link to="/delivery">
+                <Button
+                  variant="secondary"
+                  className="rounded-full border border-white/30 bg-white/15 text-white hover:bg-white/25"
+                >
+                  <Truck className="mr-2 h-4 w-4" />
+                  Become a delivery agent
+                </Button>
+              </Link>
             </div>
           </div>
         </div>
@@ -903,6 +925,13 @@ function ProductCard({ product, viewMode }: { product: Product; viewMode: 'grid'
                 <h3 className="font-medium line-clamp-2 group-hover:text-primary transition-colors">
                   {product.name}
                 </h3>
+                <div className="mt-1">
+                  <ProductVerificationBadge
+                    status={product.verification_status}
+                    details={product.verification_details}
+                    compact
+                  />
+                </div>
                 <div className="flex items-baseline gap-2 mt-2">
                   <span className="text-lg font-bold text-primary">₦{product.price.toLocaleString()}</span>
                   {hasDiscount && (
@@ -994,6 +1023,13 @@ function ProductCard({ product, viewMode }: { product: Product; viewMode: 'grid'
             <h3 className="font-medium text-sm line-clamp-2 mb-2 group-hover:text-primary transition-colors">
               {product.name}
             </h3>
+            <div className="mb-2">
+              <ProductVerificationBadge
+                status={product.verification_status}
+                details={product.verification_details}
+                compact
+              />
+            </div>
             <div className="flex items-baseline gap-2">
               <span className="text-lg font-bold text-primary">₦{product.price.toLocaleString()}</span>
               {hasDiscount && (

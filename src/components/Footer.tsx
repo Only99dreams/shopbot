@@ -6,6 +6,7 @@ const footerLinks = {
     { label: "Features", href: "#features" },
     { label: "Pricing", href: "#pricing" },
     { label: "Marketplace", href: "/marketplace", isRoute: true },
+    { label: "Become a Delivery Agent", href: "/delivery", isRoute: true },
     { label: "How it Works", href: "#how-it-works" },
   ],
   company: [

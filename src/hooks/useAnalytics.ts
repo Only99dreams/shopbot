@@ -60,6 +60,7 @@ export function useAnalytics() {
             id,
             total,
             created_at,
+            customer_id,
             order_items (
               quantity,
               unit_price,

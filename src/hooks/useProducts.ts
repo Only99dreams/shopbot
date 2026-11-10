@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useShop } from './useShop';
 import { toast } from 'sonner';
+import type { Json } from '@/integrations/supabase/types';
 
 export interface Product {
   id: string;
@@ -14,6 +15,10 @@ export interface Product {
   images: string[];
   category_id: string | null;
   shop_id: string;
+  nafdac_number?: string | null;
+  verification_status?: 'unverified' | 'pending' | 'verified' | 'flagged';
+  verification_details?: Json | null;
+  verified_at?: string | null;
   created_at: string;
   updated_at: string;
 }

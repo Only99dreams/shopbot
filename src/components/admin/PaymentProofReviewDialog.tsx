@@ -45,134 +45,28 @@ export function PaymentProofReviewDialog({
 
     setProcessing(true);
     try {
-      // Update the payment proof status
-      await reviewPaymentProof.mutateAsync({
-        proofId: proof.id,
-        status: 'approved',
-        adminNotes,
-        reviewedBy: user.id,
+      // Approval is performed atomically server-side: the proof is marked
+      // approved, the order is settled (the redemption-code trigger runs),
+      // the seller wallet is credited exactly once, and subscriptions are
+      // activated with the correct billing period.
+      const { error } = await supabase.rpc('approve_payment_proof', {
+        p_proof_id: proof.id,
+        p_admin_notes: adminNotes || null,
       });
 
-      if (proof.payment_type === 'subscription') {
-        // Update subscription status
-        const { error: subError } = await supabase
-          .from('subscriptions')
-          .update({
-            status: 'active',
-            current_period_start: new Date().toISOString(),
-            current_period_end: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-          })
-          .eq('id', proof.reference_id);
+      if (error) throw error;
 
-        if (subError) throw subError;
-
-        // Also activate the shop so it becomes visible to buyers
-        const { error: shopError } = await supabase
-          .from('shops')
-          .update({ is_active: true })
-          .eq('id', proof.shop_id);
-
-        if (shopError) {
-          console.error('Error activating shop:', shopError);
-        }
-
-        toast.success("Subscription activated successfully");
-      } else if (proof.payment_type === 'order') {
-        // Update order payment status
-        const { error: orderError } = await supabase
-          .from('orders')
-          .update({ payment_status: 'paid' })
-          .eq('id', proof.reference_id);
-
-        if (orderError) throw orderError;
-
-        // Credit seller wallet
-        const { data: wallet } = await supabase
-          .from('seller_wallets')
-          .select('*')
-          .eq('shop_id', proof.shop_id)
-          .single();
-
-        const platformFee = proof.amount * 0.05; // 5% platform fee
-        const sellerAmount = proof.amount - platformFee;
-
-        if (wallet) {
-          await supabase
-            .from('seller_wallets')
-            .update({
-              balance: wallet.balance + sellerAmount,
-              total_earned: wallet.total_earned + sellerAmount,
-            })
-            .eq('id', wallet.id);
-        } else {
-          await supabase
-            .from('seller_wallets')
-            .insert({
-              shop_id: proof.shop_id,
-              balance: sellerAmount,
-              total_earned: sellerAmount,
-            });
-        }
-
-        // Create payment record
-        await supabase
-          .from('payments')
-          .insert({
-            order_id: proof.reference_id,
-            shop_id: proof.shop_id,
-            amount: proof.amount,
-            platform_fee: platformFee,
-            seller_amount: sellerAmount,
-            status: 'success',
-            paystack_reference: `BANK-${proof.id.substring(0, 8)}`,
-            credited_to_seller: true,
-            credited_at: new Date().toISOString(),
-          });
-
-        // Generate redemption code for the order
-        const { data: redemptionCode, error: codeError } = await supabase
-          .rpc('generate_redemption_code');
-
-        if (!codeError && redemptionCode) {
-          await supabase
-            .from('redemption_codes')
-            .insert({
-              order_id: proof.reference_id,
-              shop_id: proof.shop_id,
-              code: redemptionCode,
-              status: 'active',
-            });
-
-          // Update order with redemption code reference
-          const { data: codeRecord } = await supabase
-            .from('redemption_codes')
-            .insert({
-              order_id: proof.reference_id,
-              shop_id: proof.shop_id,
-              code: redemptionCode,
-              status: 'active',
-            })
-            .select()
-            .single();
-
-          if (codeRecord) {
-            await supabase
-              .from('orders')
-              .update({
-                redemption_code_id: codeRecord.id,
-              })
-              .eq('id', proof.reference_id);
-          }
-        }
-
-        toast.success("Payment approved and credited to seller");
-      }
+      toast.success(
+        proof.payment_type === 'subscription'
+          ? "Subscription activated successfully"
+          : "Payment approved and credited to seller"
+      );
 
       onReviewComplete();
       onOpenChange(false);
     } catch (error) {
       console.error("Error approving payment:", error);
-      toast.error("Failed to approve payment");
+      toast.error(error instanceof Error ? error.message : "Failed to approve payment");
     } finally {
       setProcessing(false);
     }

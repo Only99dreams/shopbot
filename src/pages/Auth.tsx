@@ -42,6 +42,8 @@ export default function Auth() {
   const [otpLoading, setOtpLoading] = useState(false);
   const [resendCooldown, setResendCooldown] = useState(0);
   const referralCode = searchParams.get('ref');
+  const accountType = searchParams.get('account') === 'delivery_agent' ? 'delivery_agent' : 'seller';
+  const isDeliveryAgent = accountType === 'delivery_agent';
   
   const [resendEmailCooldown, setResendEmailCooldown] = useState(0);
   const [emailOtpValue, setEmailOtpValue] = useState('');
@@ -60,9 +62,9 @@ export default function Auth() {
 
   useEffect(() => {
     if (user) {
-      navigate('/dashboard');
+      navigate(isDeliveryAgent ? '/delivery' : '/dashboard');
     }
-  }, [user, navigate]);
+  }, [user, navigate, isDeliveryAgent]);
 
   // Resend cooldown timer
   useEffect(() => {
@@ -211,61 +213,37 @@ export default function Auth() {
 
     setLoading(true);
 
-    // Check if shop name is already taken (case-insensitive)
-    const { data: existingShop } = await supabase
-      .from('shops')
-      .select('id')
-      .ilike('name', registerData.shopName)
-      .maybeSingle();
+    // Check if shop name is already taken (case-insensitive). Delivery agents
+    // do not own a shop, so the name is just their display name.
+    if (!isDeliveryAgent) {
+      const { data: existingShop } = await supabase
+        .from('shops')
+        .select('id')
+        .ilike('name', registerData.shopName)
+        .maybeSingle();
 
-    if (existingShop) {
-      setLoading(false);
-      setErrors({ shopName: "This shop name is already taken. Please choose a different name." });
-      toast({
-        title: "Shop name unavailable",
-        description: "A shop with this name already exists. Please choose a different name.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    // Skip OTP verification - directly create account
-    const { error, data } = await signUp(registerData.email, registerData.password, {
-      full_name: registerData.shopName,
-      phone: formatPhoneNumber(registerData.phone),
-      shop_name: registerData.shopName,
-    });
-
-    // Process referral if there's a referral code
-    if (!error && data?.user && referralCode) {
-      try {
-        // Find the referrer by code
-        const { data: codeData } = await supabase
-          .from('referral_codes')
-          .select('user_id')
-          .eq('code', referralCode.toUpperCase())
-          .single();
-
-        if (codeData?.user_id) {
-          // Create referral record
-          await supabase.from('referrals').insert({
-            referrer_id: codeData.user_id,
-            referred_id: data.user.id,
-            referral_code: referralCode.toUpperCase(),
-            status: 'pending',
-            reward_amount: 200, // ₦200 reward when referred user pays
-          });
-
-          // Update referrer's total referrals count
-          await supabase.rpc('increment_referral_count', { 
-            referrer_user_id: codeData.user_id 
-          });
-        }
-      } catch (refError) {
-        console.error('Error processing referral:', refError);
-        // Don't fail registration if referral processing fails
+      if (existingShop) {
+        setLoading(false);
+        setErrors({ shopName: "This shop name is already taken. Please choose a different name." });
+        toast({
+          title: "Shop name unavailable",
+          description: "A shop with this name already exists. Please choose a different name.",
+          variant: "destructive",
+        });
+        return;
       }
     }
+
+    // Skip OTP verification - directly create account.
+    // The referral is recorded server-side by handle_new_user() from this
+    // metadata, so it cannot be forged by the client.
+    const { error } = await signUp(registerData.email, registerData.password, {
+      full_name: registerData.shopName,
+      phone: formatPhoneNumber(registerData.phone),
+      shop_name: isDeliveryAgent ? undefined : registerData.shopName,
+      account_type: accountType,
+      referral_code: referralCode ? referralCode.toUpperCase() : undefined,
+    });
 
     setLoading(false);
 
@@ -390,7 +368,7 @@ export default function Auth() {
           title: "Welcome to ShopAfrica! 🎉",
           description: "Your email has been verified. Redirecting to your dashboard...",
         });
-        setTimeout(() => navigate('/dashboard'), 2000);
+        setTimeout(() => navigate(isDeliveryAgent ? '/delivery' : '/dashboard'), 2000);
       }
     } catch {
       setEmailOtpLoading(false);
@@ -427,43 +405,15 @@ export default function Auth() {
       return;
     }
 
-    // OTP verified, now create the account
-    const { error, data } = await signUp(registerData.email, registerData.password, {
+    // OTP verified, now create the account.
+    // The referral is recorded server-side by handle_new_user().
+    const { error } = await signUp(registerData.email, registerData.password, {
       full_name: registerData.shopName,
       phone: formatPhoneNumber(registerData.phone),
-      shop_name: registerData.shopName,
+      shop_name: isDeliveryAgent ? undefined : registerData.shopName,
+      account_type: accountType,
+      referral_code: referralCode ? referralCode.toUpperCase() : undefined,
     });
-
-    // Process referral if there's a referral code
-    if (!error && data?.user && referralCode) {
-      try {
-        // Find the referrer by code
-        const { data: codeData } = await supabase
-          .from('referral_codes')
-          .select('user_id')
-          .eq('code', referralCode.toUpperCase())
-          .single();
-
-        if (codeData?.user_id) {
-          // Create referral record
-          await supabase.from('referrals').insert({
-            referrer_id: codeData.user_id,
-            referred_id: data.user.id,
-            referral_code: referralCode.toUpperCase(),
-            status: 'pending',
-            reward_amount: 200, // ₦200 reward when referred user pays
-          });
-
-          // Update referrer's total referrals count
-          await supabase.rpc('increment_referral_count', { 
-            referrer_user_id: codeData.user_id 
-          });
-        }
-      } catch (refError) {
-        console.error('Error processing referral:', refError);
-        // Don't fail registration if referral processing fails
-      }
-    }
 
     setOtpLoading(false);
 
@@ -484,7 +434,7 @@ export default function Auth() {
         title: "Account created!",
         description: "Welcome to ShopAfrica. Your subscription is pending activation.",
       });
-      setTimeout(() => navigate('/dashboard'), 2000);
+      setTimeout(() => navigate(isDeliveryAgent ? '/delivery' : '/dashboard'), 2000);
     }
   };
 
@@ -688,13 +638,23 @@ export default function Auth() {
           ) : (
             <>
               <h2 className="text-4xl font-bold mb-6">
-                Start Selling Online Today
+                {isDeliveryAgent ? 'Earn as a Delivery Agent' : 'Start Selling Online Today'}
               </h2>
               <p className="text-primary-foreground/80 text-lg mb-8">
-                Join 10,000+ sellers who are growing their business with ShopAfrica.
+                {isDeliveryAgent
+                  ? 'Join the ShopAfrica delivery network and get paid for every order you deliver in your city.'
+                  : 'Join 10,000+ sellers who are growing their business with ShopAfrica.'}
               </p>
               <ul className="space-y-4">
-                {benefits.map((benefit) => (
+                {(isDeliveryAgent
+                  ? [
+                      'See delivery jobs in your state and city',
+                      'Keep up to 85% of every delivery fee',
+                      'Track earnings and request bank payouts',
+                      'Accept jobs right from your phone',
+                    ]
+                  : benefits
+                ).map((benefit) => (
                   <li key={benefit} className="flex items-center gap-3">
                     <CheckCircle2 className="h-6 w-6 flex-shrink-0" />
                     <span className="text-lg">{benefit}</span>
@@ -715,12 +675,14 @@ export default function Auth() {
               <span className="text-2xl font-bold">ShopAfrica</span>
             </Link>
             <h1 className="mt-8 text-3xl font-bold">
-              {isLogin ? "Welcome back" : "Create your shop"}
+              {isLogin ? "Welcome back" : isDeliveryAgent ? "Become a delivery agent" : "Create your shop"}
             </h1>
             <p className="mt-2 text-muted-foreground">
-              {isLogin 
-                ? "Sign in to manage your shop" 
-                : "Create your shop and start selling today."}
+              {isLogin
+                ? "Sign in to manage your shop"
+                : isDeliveryAgent
+                  ? "Create your delivery agent account to start earning."
+                  : "Create your shop and start selling today."}
             </p>
           </div>
 
@@ -780,11 +742,11 @@ export default function Auth() {
           ) : (
             <form onSubmit={handleRegisterStep1} className="space-y-5">
               <div className="space-y-2">
-                <Label htmlFor="shopName">Business Name</Label>
+                <Label htmlFor="shopName">{isDeliveryAgent ? 'Full name' : 'Business Name'}</Label>
                 <Input
                   id="shopName"
                   type="text"
-                  placeholder="Your Store Name"
+                  placeholder={isDeliveryAgent ? 'e.g. Musa Ibrahim' : 'Your Store Name'}
                   value={registerData.shopName}
                   onChange={handleRegisterChange("shopName")}
                   className={`h-12 ${errors.shopName ? 'border-destructive' : ''}`}

@@ -7,6 +7,9 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { useProducts, type Product, type Category } from '@/hooks/useProducts';
+import { NafdacField } from '@/components/products/NafdacField';
+import type { VerificationDetails } from '@/components/products/ProductVerificationBadge';
+import { supabase } from '@/integrations/supabase/client';
 import { X, Loader2, ImagePlus } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -29,6 +32,7 @@ export function EditProductDialog({ open, onOpenChange, product, categories }: E
     compare_at_price: '',
     stock_quantity: '',
     category_id: '',
+    nafdac_number: '',
     is_available: true,
   });
 
@@ -41,6 +45,7 @@ export function EditProductDialog({ open, onOpenChange, product, categories }: E
         compare_at_price: product.compare_at_price?.toString() || '',
         stock_quantity: product.stock_quantity.toString(),
         category_id: product.category_id || '',
+        nafdac_number: product.nafdac_number || '',
         is_available: product.is_available,
       });
       setImages(product.images || []);
@@ -56,8 +61,8 @@ export function EditProductDialog({ open, onOpenChange, product, categories }: E
       const urls = await Promise.all(uploadPromises);
       setImages(prev => [...prev, ...urls]);
       toast.success(`${files.length} image(s) uploaded`);
-    } catch (error: any) {
-      toast.error(`Failed to upload images: ${error.message}`);
+    } catch (error) {
+      toast.error(`Failed to upload images: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
       setUploadingImages(false);
     }
@@ -95,10 +100,17 @@ export function EditProductDialog({ open, onOpenChange, product, categories }: E
         compare_at_price: formData.compare_at_price ? parseFloat(formData.compare_at_price) : null,
         stock_quantity: formData.stock_quantity ? parseInt(formData.stock_quantity) : 0,
         category_id: formData.category_id || null,
+        nafdac_number: formData.nafdac_number.trim() || null,
         is_available: formData.is_available,
         images,
       });
-      
+
+      if (formData.nafdac_number.trim()) {
+        supabase.functions
+          .invoke('verify-nafdac', { body: { productId: product.id } })
+          .catch((error) => console.error('NAFDAC verification failed:', error));
+      }
+
       onOpenChange(false);
     } catch (error) {
       // Error handled in hook
@@ -240,6 +252,15 @@ export function EditProductDialog({ open, onOpenChange, product, categories }: E
               </Select>
             </div>
           </div>
+
+          {/* NAFDAC verification */}
+          <NafdacField
+            value={formData.nafdac_number}
+            onChange={(value) => setFormData(prev => ({ ...prev, nafdac_number: value }))}
+            productId={product.id}
+            status={product.verification_status}
+            details={product.verification_details as unknown as VerificationDetails | null}
+          />
 
           {/* Availability */}
           <div className="flex items-center justify-between p-4 bg-muted/50 rounded-lg">

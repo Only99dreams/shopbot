@@ -12,7 +12,7 @@ serve(async (req) => {
   }
 
   try {
-    const { orderId, email, amount, callbackUrl } = await req.json();
+    const { orderId, email, callbackUrl } = await req.json();
 
     const flutterwaveSecretKey = Deno.env.get('FLUTTERWAVE_SECRET_KEY');
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
@@ -22,6 +22,10 @@ serve(async (req) => {
       throw new Error('Flutterwave secret key not configured');
     }
 
+    if (!orderId) {
+      throw new Error('Order id is required');
+    }
+
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     // Get order details
@@ -29,16 +33,26 @@ serve(async (req) => {
       .from('orders')
       .select('*, shops(*)')
       .eq('id', orderId)
-      .single();
+      .maybeSingle();
 
     if (orderError || !order) {
       throw new Error('Order not found');
     }
 
+    if (order.payment_status === 'paid') {
+      throw new Error('This order has already been paid');
+    }
+
+    // Never trust a client-supplied amount: always charge the stored order total.
+    const orderTotal = Number(order.total);
+    if (!Number.isFinite(orderTotal) || orderTotal <= 0) {
+      throw new Error('Order total is invalid');
+    }
+
     // Generate unique transaction reference
     const txRef = `SHOPAF_${orderId}_${Date.now()}`;
 
-    console.log('Initializing Flutterwave payment:', { txRef, amount, email });
+    console.log('Initializing Flutterwave payment:', { txRef, amount: orderTotal });
 
     // Initialize Flutterwave Standard payment
     const response = await fetch('https://api.flutterwave.com/v3/payments', {
@@ -49,11 +63,11 @@ serve(async (req) => {
       },
       body: JSON.stringify({
         tx_ref: txRef,
-        amount: amount || order.total,
+        amount: orderTotal,
         currency: 'NGN',
         redirect_url: callbackUrl,
         customer: {
-          email: email || 'customer@shopnaija.com',
+          email: email || 'customer@shopafrica.com',
         },
         meta: {
           order_id: orderId,
@@ -75,17 +89,24 @@ serve(async (req) => {
       throw new Error(data.message || 'Failed to initialize payment');
     }
 
+    // The seller is paid on the goods subtotal only. The delivery fee is
+    // reserved for the delivery agent and the platform.
+    const orderSubtotal = Number(order.subtotal);
+    const sellerBase = Number.isFinite(orderSubtotal) && orderSubtotal > 0
+      ? orderSubtotal
+      : orderTotal;
+
     // Create payment record
     const { error: paymentError } = await supabase
       .from('payments')
       .insert({
         order_id: orderId,
         shop_id: order.shop_id,
-        amount: order.total,
+        amount: orderTotal,
         paystack_reference: txRef, // reusing column for flutterwave tx_ref
         status: 'pending',
-        platform_fee: order.total * 0.05,
-        seller_amount: order.total * 0.95,
+        platform_fee: sellerBase * 0.05,
+        seller_amount: sellerBase * 0.95,
       });
 
     if (paymentError) {
@@ -99,11 +120,11 @@ serve(async (req) => {
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
-  } catch (error: any) {
+  } catch (error) {
     console.error('Error in flutterwave-initialize:', error);
     return new Response(JSON.stringify({
       success: false,
-      error: error.message,
+      error: error instanceof Error ? error.message : 'Failed to initialize payment',
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });

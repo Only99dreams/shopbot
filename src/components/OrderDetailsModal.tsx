@@ -38,7 +38,7 @@ interface OrderDetails {
   redemption_codes: {
     code: string;
     status: string;
-  } | null;
+  }[] | null;
 }
 
 interface OrderDetailsModalProps {
@@ -161,11 +161,11 @@ export function OrderDetailsModal({ orderId, open, onOpenChange }: OrderDetailsM
                     {order.redemption_confirmed ? 'Confirmed' : 'Pending'}
                   </Badge>
                 </div>
-                {order.redemption_codes && (
+                {order.redemption_codes?.[0] && (
                   <div className="flex items-center gap-2">
                     <span className="text-sm font-medium">Code:</span>
                     <span className="font-mono text-sm bg-muted px-2 py-1 rounded">
-                      {order.redemption_codes.code}
+                      {order.redemption_codes[0].code}
                     </span>
                   </div>
                 )}

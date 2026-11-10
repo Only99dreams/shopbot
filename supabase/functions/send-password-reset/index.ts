@@ -55,13 +55,30 @@ serve(async (req) => {
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    // Check if the email exists in auth.users
-    const { data: usersData, error: listError } = await supabase.auth.admin.listUsers();
-    const userExists = usersData?.users?.some(
-      (u: any) => u.email?.toLowerCase() === email.toLowerCase()
-    );
+    // Check if the email exists in auth.users. listUsers is paginated, so
+    // walk every page instead of only checking the first 50 users.
+    let userExists = false;
+    for (let page = 1; ; page += 1) {
+      const { data: usersData, error: listError } = await supabase.auth.admin.listUsers({
+        page,
+        perPage: 1000,
+      });
 
-    if (listError || !userExists) {
+      if (listError) {
+        console.error("Error listing users:", listError);
+        break;
+      }
+
+      const users = usersData?.users ?? [];
+      if (users.some((u) => u.email?.toLowerCase() === email.toLowerCase())) {
+        userExists = true;
+        break;
+      }
+
+      if (users.length < 1000) break;
+    }
+
+    if (!userExists) {
       // Return success even if user doesn't exist (security: don't reveal user existence)
       return jsonResponse({ success: true });
     }

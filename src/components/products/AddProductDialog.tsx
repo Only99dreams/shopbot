@@ -7,7 +7,9 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { useProducts, type Category } from '@/hooks/useProducts';
-import { Upload, X, Loader2, ImagePlus } from 'lucide-react';
+import { NafdacField } from '@/components/products/NafdacField';
+import { supabase } from '@/integrations/supabase/client';
+import { X, Loader2, ImagePlus } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface AddProductDialogProps {
@@ -28,6 +30,7 @@ export function AddProductDialog({ open, onOpenChange, categories }: AddProductD
     compare_at_price: '',
     stock_quantity: '',
     category_id: '',
+    nafdac_number: '',
     is_available: true,
   });
 
@@ -40,8 +43,8 @@ export function AddProductDialog({ open, onOpenChange, categories }: AddProductD
       const urls = await Promise.all(uploadPromises);
       setImages(prev => [...prev, ...urls]);
       toast.success(`${files.length} image(s) uploaded`);
-    } catch (error: any) {
-      toast.error(`Failed to upload images: ${error.message}`);
+    } catch (error) {
+      toast.error(`Failed to upload images: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
       setUploadingImages(false);
     }
@@ -66,16 +69,25 @@ export function AddProductDialog({ open, onOpenChange, categories }: AddProductD
 
     setLoading(true);
     try {
-      await createProduct.mutateAsync({
+      const created = await createProduct.mutateAsync({
         name: formData.name.trim(),
         description: formData.description.trim() || null,
         price: parseFloat(formData.price),
         compare_at_price: formData.compare_at_price ? parseFloat(formData.compare_at_price) : null,
         stock_quantity: formData.stock_quantity ? parseInt(formData.stock_quantity) : 0,
         category_id: formData.category_id || null,
+        nafdac_number: formData.nafdac_number.trim() || null,
         is_available: formData.is_available,
         images,
       });
+
+      // Run the Greenbook lookup in the background so the product is saved
+      // immediately. The seller sees the badge once the check completes.
+      if (created?.id && formData.nafdac_number.trim()) {
+        supabase.functions
+          .invoke('verify-nafdac', { body: { productId: created.id } })
+          .catch((error) => console.error('NAFDAC verification failed:', error));
+      }
       
       // Reset form
       setFormData({
@@ -85,6 +97,7 @@ export function AddProductDialog({ open, onOpenChange, categories }: AddProductD
         compare_at_price: '',
         stock_quantity: '',
         category_id: '',
+        nafdac_number: '',
         is_available: true,
       });
       setImages([]);
@@ -229,6 +242,12 @@ export function AddProductDialog({ open, onOpenChange, categories }: AddProductD
               </Select>
             </div>
           </div>
+
+          {/* NAFDAC verification */}
+          <NafdacField
+            value={formData.nafdac_number}
+            onChange={(value) => setFormData(prev => ({ ...prev, nafdac_number: value }))}
+          />
 
           {/* Availability */}
           <div className="flex items-center justify-between p-4 bg-muted/50 rounded-lg">
