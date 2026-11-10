@@ -37,6 +37,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ProductVerificationBadge, type VerificationDetails } from '@/components/products/ProductVerificationBadge';
+import { ProductAuthenticityChecker } from '@/components/products/ProductAuthenticityChecker';
 import { useAuth } from '@/hooks/useAuth';
 import { useMutation } from '@tanstack/react-query';
 import { toast } from 'sonner';
@@ -478,7 +479,12 @@ export default function Marketplace() {
               )}
             </div>
 
-            <div className="mt-8 flex justify-center">
+            <div className="mt-8 flex flex-wrap justify-center gap-3">
+              <ProductAuthenticityChecker
+                variant="secondary"
+                label="Check if a product is real"
+                className="rounded-full border border-white/30 bg-white/15 text-white hover:bg-white/25"
+              />
               <Link to="/delivery">
                 <Button
                   variant="secondary"
